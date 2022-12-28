@@ -1,26 +1,3 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <getopt.h>
-#include <errno.h>
-#include <time.h>
-#include <signal.h>
-#include <sys/queue.h>
-#include <limits.h>
-#include <poll.h>
-#include <netinet/ip.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <arpa/inet.h>
-#include <net/if.h>
-#include <netinet/tcp.h>
-#include <sys/un.h>
-#include <netdb.h>
-#include <pthread.h>
-
 #include "sipc_lib.h"
 
 static unsigned int glb_port = 0;
