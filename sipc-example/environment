@@ -1,0 +1,6 @@
+#!/bin/bash
+source ./Config
+
+OUTPUT=$(env | grep LD_LIBRARY_PATH)
+PWD=$(pwd)
+export $OUTPUT:$PWD/$LIBRARY_PATH
