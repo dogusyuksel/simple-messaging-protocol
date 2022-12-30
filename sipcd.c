@@ -2,6 +2,7 @@
 
 static struct title_list title_list;
 static struct orphan_list orphan_list;
+static bool available_port_map[BACKLOG] = {0};
 
 static struct option parameters[] = {
 	{ "help",				no_argument,		0,	0x100	},
@@ -48,8 +49,9 @@ int main(int argc, char **argv)
 
 	TAILQ_INIT(&title_list);
 	TAILQ_INIT(&orphan_list);
+	memset(available_port_map, 0, sizeof(bool) * BACKLOG);
 
-	sipc_create_server_daemon(&title_list, &orphan_list);
+	sipc_create_server_daemon(&title_list, &orphan_list, available_port_map);
 
 	goto out;
 

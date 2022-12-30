@@ -17,7 +17,7 @@
 #include <signal.h>
 
 
-#define VERSION		"01.00"
+#define VERSION		"00.01"
 
 #define UNUSED(__val__)		((void)__val__)
 
@@ -38,6 +38,8 @@
 #define IPV4_WILDCARD_ADDR		"0.0.0.0"
 #define IPV4_LOOPBACK_ADDR		"127.0.0.1"
 #define DEFAULT_LOCALHOST_IFACE	"lo"
+
+#define IDENTIFIER_INIT			0
 
 #define ANSI_COLOR_RED		"\x1b[31m"
 #define ANSI_COLOR_GREEN	"\x1b[32m"
@@ -68,6 +70,8 @@
 								p = NULL;						\
 							}									\
 						}
+
+typedef unsigned int _sipc_identifier;
 
 enum _packet_type
 {
@@ -132,21 +136,23 @@ int sipc_getnameinfo(const struct sockaddr *client_ip, char *ip, size_t sipc_siz
 int sipc_socket_set_tos(int sockfd);
 int sipc_socket_listen(int sockfd, int backlog);
 int sipc_socket_accept(int sockfd, struct sockaddr_storage *addr);
-int sipc_send_packet(struct _packet *packet, int fd);
+int sipc_send_packet(struct _packet *packet, int fd, _sipc_identifier *identifier);
+int sipc_send_packet_daemon(struct _packet *packet, int fd);
 int sipc_read_data(int sockfd,  int (*callback)(void *, unsigned int), bool *destoy);
-int sipc_read_data_daemon(int sockfd, struct title_list *title_list, struct orphan_list *orphan_list);
-int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port);
+int sipc_read_data_daemon(int sockfd, struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports);
+int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port, _sipc_identifier *identifier);
 int sipc_send_daemon(char *title_arg, enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port);
-int sipc_register(char *title, int (*callback)(void *, unsigned int));
-int sipc_broadcast(void *data, unsigned int len);
-int sipc_unregister(char *title);
-int sipc_destroy(void);
-int sipc_send_data(char *title, void *data, unsigned int len);
 void *sipc_create_server(void *arg);
-void sipc_create_server_daemon(struct title_list *title_list, struct orphan_list *orphan_list);
-int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port, struct title_list *title_list, struct orphan_list *orphan_list);
-unsigned int next_available_port(void);
+void sipc_create_server_daemon(struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports);
+int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port, struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports);
+unsigned int next_available_port(bool *available_ports);
 void title_data_structure_destroy(struct title_list *title_list);
 void orphan_data_structure_destroy(struct orphan_list *orphan_list);
+
+int sipc_register(_sipc_identifier *identifier, char *title, int (*callback)(void *, unsigned int));
+int sipc_broadcast(_sipc_identifier *identifier, void *data, unsigned int len);
+int sipc_unregister(_sipc_identifier *identifier, char *title);
+int sipc_destroy(_sipc_identifier *identifier);
+int sipc_send_data(_sipc_identifier *identifier, char *title, void *data, unsigned int len);
 
 #endif //__SIPC_LIB_

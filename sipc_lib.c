@@ -1,8 +1,5 @@
 #include "sipc_lib.h"
 
-static unsigned int glb_port = 0;
-static unsigned int glb_next_vailable_port = STARTING_PORT;
-
 bool sipc_is_ipv6(const char *ipaddress)
 {
 	struct in6_addr r;
@@ -292,7 +289,7 @@ int sipc_socket_listen(int sockfd, int backlog)
 	return OK;
 }
 
-int sipc_send_packet(struct _packet *packet, int fd)
+int sipc_send_packet_daemon(struct _packet *packet, int fd)
 {
 	if (!packet || !packet->title || fd < 0) {
 		errorf("arg wrong\n");
@@ -319,12 +316,49 @@ int sipc_send_packet(struct _packet *packet, int fd)
 		return NOK;
 	}
 
-	if (packet->payload_size && send(fd, packet->payload, packet->payload_size, 0) == -1) {
+	if (packet->payload_size && packet->payload && send(fd, packet->payload, packet->payload_size, 0) == -1) {
 		errorf("send() failed with %d: %s\n", errno, strerror(errno));
 		return NOK;
 	}
 
-	if (send(fd, &glb_port, sizeof(glb_port), 0) == -1) {
+	return OK;
+}
+
+int sipc_send_packet(struct _packet *packet, int fd, _sipc_identifier *identifier)
+{
+	unsigned int local_port = *identifier;
+
+	if (!packet || !packet->title || fd < 0) {
+		errorf("arg wrong\n");
+		return NOK;
+	}
+
+	if (send(fd, &packet->packet_type, sizeof(packet->packet_type), 0) == -1) {
+		errorf("send() failed with %d: %s\n", errno, strerror(errno));
+		return NOK;
+	}
+
+	if (send(fd, &packet->title_size, sizeof(packet->title_size), 0) == -1) {
+		errorf("send() failed with %d: %s\n", errno, strerror(errno));
+		return NOK;
+	}
+
+	if (packet->title_size && send(fd, packet->title, packet->title_size, 0) == -1) {
+		errorf("send() failed with %d: %s\n", errno, strerror(errno));
+		return NOK;
+	}
+
+	if (send(fd, &packet->payload_size, sizeof(packet->payload_size), 0) == -1) {
+		errorf("send() failed with %d: %s\n", errno, strerror(errno));
+		return NOK;
+	}
+
+	if (packet->payload_size && packet->payload && send(fd, packet->payload, packet->payload_size, 0) == -1) {
+		errorf("send() failed with %d: %s\n", errno, strerror(errno));
+		return NOK;
+	}
+
+	if (send(fd, &local_port, sizeof(local_port), 0) == -1) {
 		errorf("send() failed with %d: %s\n", errno, strerror(errno));
 		return NOK;
 	}
@@ -360,13 +394,18 @@ static char *packet_type_beautiy(enum _packet_type type)
 	return "error";
 }
 
-int sipc_read_data_daemon(int sockfd, struct title_list *title_list, struct orphan_list *orphan_list)
+int sipc_read_data_daemon(int sockfd, struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports)
 {
 	int ret = OK;
 	int byte_write;
 	struct _packet packet;
 	unsigned int old_port = 0;
 	unsigned int next_port = 0;
+
+	if (!title_list || !orphan_list || !available_ports) {
+		errorf("arg is null\n");
+		goto fail;
+	}
 
 	memset(&packet, 0, sizeof(struct _packet));
 
@@ -429,16 +468,18 @@ proceed:
 	}
 
 	if (!old_port && packet.packet_type == REGISTER) {
-		next_port = next_available_port();
+		next_port = next_available_port(available_ports);
 		byte_write = write(sockfd, &next_port, sizeof(next_port));
 		if (byte_write != sizeof(next_port)) {
 			errorf("Write error to socket %d.\n", sockfd);
 			goto fail;
 		}
 		old_port = next_port;
+
+		sleep(5); //give time to caller to create server thread
 	}
 
-	if (sipc_packet_handler_daemon(&packet, old_port, title_list, orphan_list) == NOK) {
+	if (sipc_packet_handler_daemon(&packet, old_port, title_list, orphan_list, available_ports) == NOK) {
 		errorf("sipc_packet_handler() failed\n");
 		goto fail;
 	}
@@ -637,8 +678,8 @@ int sipc_send_daemon(char *title_arg, enum _packet_type packet_type, void *data,
 		debugf("send data %s to port %d\n", packet.payload, _port);
 	}
 
-	if (sipc_send_packet(&packet, fd) == NOK) {
-		errorf("sipc_send_packet() failed with %d: %s\n", errno, strerror(errno));
+	if (sipc_send_packet_daemon(&packet, fd) == NOK) {
+		errorf("sipc_send_packet_daemon() failed with %d: %s\n", errno, strerror(errno));
 		goto fail;
 	}
 
@@ -656,10 +697,11 @@ out:
 	return ret;
 }
 
-int sipc_send(char *title_arg, int (*callback)(void *, unsigned int), enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port)
+int sipc_send(char *title_arg, int (*callback)(void *, unsigned int), enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port, _sipc_identifier *identifier)
 {
 	int ret = OK;
 	int fd;
+	unsigned int local_svr_port = *identifier;
 	struct sockaddr_storage address;
 	struct _packet packet;
 	char *title = NULL;
@@ -713,25 +755,29 @@ int sipc_send(char *title_arg, int (*callback)(void *, unsigned int), enum _pack
 		packet.payload_size = len + 1;
 	}
 
-	if (sipc_send_packet(&packet, fd) == NOK) {
+	if (sipc_send_packet(&packet, fd, identifier) == NOK) {
 		errorf("sipc_send_packet() failed with %d: %s\n", errno, strerror(errno));
 		goto fail;
 	}
 
-	if (!glb_port) {
-		if (recv(fd, &glb_port, sizeof(unsigned int), 0) == -1) {
+	if (!local_svr_port) {
+		if (!callback) {
+			errorf("this is the first time register call. 'callback' cannot be NULL\n");
+			goto fail;
+		}
+		if (recv(fd, &local_svr_port, sizeof(unsigned int), 0) == -1) {
 			errorf("recv() failed with %d: %s\n", errno, strerror(errno));
 			goto fail;
 		}
 
-		if (glb_port < STARTING_PORT || glb_port > STARTING_PORT + BACKLOG) {
+		if (local_svr_port < STARTING_PORT || local_svr_port > STARTING_PORT + BACKLOG) {
 			errorf("port number is invalid\n");
 			goto fail;
 		}
-		debugf("port %d initialized for this app\n", glb_port);
-
-		create_server_thread(callback, glb_port);
+		debugf("port %d initialized for this app\n", local_svr_port);
+		create_server_thread(callback, local_svr_port);
 	}
+	*identifier = local_svr_port;
 
 	goto out;
 
@@ -747,41 +793,52 @@ out:
 	return ret;
 }
 
-int sipc_register(char *title, int (*callback)(void *, unsigned int))
+int sipc_register(_sipc_identifier *identifier, char *title, int (*callback)(void *, unsigned int))
 {
-	if (!title || !callback) {
+	if (!title || !identifier) {
 		errorf("title cannot be NULL\n");
 		return NOK;
 	}
 
-	return sipc_send(title, callback, REGISTER, NULL, 0, PORT);
+	return sipc_send(title, callback, REGISTER, NULL, 0, PORT, identifier);
+
 }
 
-int sipc_broadcast(void *data, unsigned int len)
+int sipc_broadcast(_sipc_identifier *identifier, void *data, unsigned int len)
 {
-	if (!data || !len) {
+	if (!data || !len || !identifier) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	return sipc_send(NULL, NULL, BROADCAST, data, len, PORT);
+	return sipc_send(NULL, NULL, BROADCAST, data, len, PORT, identifier);
 }
 
-static int sipc_unregister_all(void)
+static int sipc_unregister_all(_sipc_identifier *identifier)
 {
 	char unreg_buf[256] = {0};
 
-	snprintf(unreg_buf, sizeof(unreg_buf), "%d", glb_port);
-
-	return sipc_send(NULL, NULL, UNREGISTER_ALL, unreg_buf, strlen(unreg_buf), PORT);
-}
-
-int sipc_destroy(void)
-{
-	if (sipc_unregister_all() == NOK) {
+	if (!identifier) {
+		errorf("args cannot be NULL\n");
 		return NOK;
 	}
-	if (sipc_send(NULL, NULL, DESTROY, NULL, 0, glb_port) == NOK) {
+
+	snprintf(unreg_buf, sizeof(unreg_buf), "%d", *identifier);
+
+	return sipc_send(NULL, NULL, UNREGISTER_ALL, unreg_buf, strlen(unreg_buf), PORT, identifier);
+}
+
+int sipc_destroy(_sipc_identifier *identifier)
+{
+	if (!identifier) {
+		errorf("args cannot be NULL\n");
+		return NOK;
+	}
+
+	if (sipc_unregister_all(identifier) == NOK) {
+		return NOK;
+	}
+	if (sipc_send(NULL, NULL, DESTROY, NULL, 0, *identifier, identifier) == NOK) {
 		return NOK;
 	}
 
@@ -790,31 +847,31 @@ int sipc_destroy(void)
 	return OK;
 }
 
-int sipc_unregister(char *title)
+int sipc_unregister(_sipc_identifier *identifier, char *title)
 {
 	char unreg_buf[256] = {0};
 
-	if (!title) {
+	if (!title || !identifier) {
 		errorf("title cannot be NULL\n");
 		return NOK;
 	}
 
-	snprintf(unreg_buf, sizeof(unreg_buf), "%d", glb_port);
-	return sipc_send(title, NULL, UNREGISTER, unreg_buf, strlen(unreg_buf), PORT);
+	snprintf(unreg_buf, sizeof(unreg_buf), "%d", *identifier);
+	return sipc_send(title, NULL, UNREGISTER, unreg_buf, strlen(unreg_buf), PORT, identifier);
 }
 
-int sipc_send_data(char *title, void *data, unsigned int len)
+int sipc_send_data(_sipc_identifier *identifier, char *title, void *data, unsigned int len)
 {
-	if (!title || !data || !len) {
+	if (!title || !data || !len || !identifier) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	return sipc_send(title, NULL, SUBSCRIBER, data, len, PORT);
+	return sipc_send(title, NULL, SUBSCRIBER, data, len, PORT, identifier);
 }
 
 
-void sipc_create_server_daemon(struct title_list *title_list, struct orphan_list *orphan_list)
+void sipc_create_server_daemon(struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports)
 {
 	int enable = 1;
 	int listen_fd, conn_fd, max_fd, ret_val, i;
@@ -898,7 +955,7 @@ void sipc_create_server_daemon(struct title_list *title_list, struct orphan_list
 
 		for (i = 0; i <= max_fd; i++) {
 			if (FD_ISSET(i, &client_set) && i != listen_fd) {
-				if (sipc_read_data_daemon(i, title_list, orphan_list) == NOK) {
+				if (sipc_read_data_daemon(i, title_list, orphan_list, available_ports) == NOK) {
 					errorf("sipc_read_data_daemon() failed\n");
 					goto out;
 				}
@@ -1123,7 +1180,7 @@ static int add_new_entry_to_title_list(char *title, unsigned int port, struct ti
 	return OK;
 }
 
-static int add_for_for_the_title(char *title, unsigned int port, struct title_list *title_list, bool *newly_created)
+static int add_port_title_couple(char *title, unsigned int port, struct title_list *title_list)
 {
 	struct title_list_entry *entry = NULL;
 
@@ -1134,7 +1191,6 @@ static int add_for_for_the_title(char *title, unsigned int port, struct title_li
 
 	if ((entry = find_entry_in_title_list(title, title_list)) == NULL) {
 		debugf("add new entry to the title list\n");
-		*newly_created = true;
 		return add_new_entry_to_title_list(title, port, title_list);
 	}
 
@@ -1248,6 +1304,7 @@ static int remove_port_from_title(char *title, unsigned int port, struct title_l
 	TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
 		if (port == pentry->port) {
 			TAILQ_REMOVE(&(entry->port_list), pentry, entries);
+			FREE(pentry);
 			break;
 		}
 	}
@@ -1269,6 +1326,7 @@ static int remove_port_from_all_title(unsigned int port, struct title_list *titl
 		TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
 			if (port == pentry->port) {
 				TAILQ_REMOVE(&(entry->port_list), pentry, entries);
+				FREE(pentry);
 			}
 		}
 	}
@@ -1302,6 +1360,7 @@ static int send_data_to_all_title(char *title, char *data, struct title_list *ti
 
 static int send_data_broadcast(char *data, struct title_list *title_list)
 {
+	bool local_port_buffer[BACKLOG] = {0};
 	struct title_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
 
@@ -1310,11 +1369,16 @@ static int send_data_broadcast(char *data, struct title_list *title_list)
 		return NOK;
 	}
 
+	memset(local_port_buffer, 0, sizeof(bool) * BACKLOG);
+
 	TAILQ_FOREACH(entry, title_list, entries) {
 		TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
-			if (sipc_send_daemon(NULL, SUBSCRIBER, (void *)data, strlen(data), pentry->port) == NOK) {
+			if (!local_port_buffer[pentry->port - STARTING_PORT] &&
+				sipc_send_daemon(NULL, SUBSCRIBER, (void *)data, strlen(data), pentry->port) == NOK) {
 				errorf("sipc_send() failed\n");
+				continue;
 			}
+			local_port_buffer[pentry->port - STARTING_PORT] = true;
 		}
 	}
 
@@ -1376,6 +1440,9 @@ static void remove_sent_orphans_from_list(struct orphan_list *orphan_list)
 	TAILQ_FOREACH(entry, orphan_list, entries) {
 		if (entry->is_sent) {
 			TAILQ_REMOVE(orphan_list, entry, entries);
+			FREE(entry->data);
+			FREE(entry->title);
+			FREE(entry);
 			break;
 		}
 	}
@@ -1407,10 +1474,9 @@ static int send_orphan_data_first(char *title, unsigned int port, struct orphan_
 	return OK;
 }
 
-int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port, struct title_list *title_list, struct orphan_list *orphan_list)
+int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port, struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports)
 {
 	int ret = OK;
-	bool newly_created = false;
 	unsigned int lport = 0;
 	char *ptr = NULL;
 
@@ -1421,17 +1487,15 @@ int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port, struct
 
 	switch (packet->packet_type) {
 		case REGISTER:
-			if (add_for_for_the_title(packet->title, port, title_list, &newly_created) == NOK) {
-				errorf("add_for_for_the_title() failed\n");
+			if (add_port_title_couple(packet->title, port, title_list) == NOK) {
+				errorf("add_port_title_couple() failed\n");
 				goto fail;
-			}
-			if (newly_created) {
-				sleep(5); //give time to caller to create server thread
 			}
 			if (send_orphan_data_first(packet->title, port, orphan_list) == NOK) {
 				errorf("send_orphan_data_first() failed\n");
 				goto fail;
 			}
+			available_ports[port - STARTING_PORT] = true;
 			break;
 		case UNREGISTER:
 			if (!packet->payload) {
@@ -1444,6 +1508,7 @@ int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port, struct
 				errorf("remove_port_from_title() failed\n");
 				goto fail;
 			}
+			available_ports[lport - STARTING_PORT] = false;
 			break;
 		case UNREGISTER_ALL:
 			if (!packet->payload) {
@@ -1456,6 +1521,7 @@ int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port, struct
 				errorf("remove_port_from_all_title() failed\n");
 				goto fail;
 			}
+			available_ports[lport - STARTING_PORT] = false;
 			break;
 		case SUBSCRIBER:
 			if (send_data_to_all_title(packet->title, packet->payload, title_list) == NOK) {
@@ -1488,8 +1554,19 @@ out:
 	return ret;
 }
 
-unsigned int next_available_port(void)
+unsigned int next_available_port(bool *available_ports)
 {
-	glb_next_vailable_port++;
-	return glb_next_vailable_port - 1;
+	unsigned int i = 0;
+
+	if (!available_ports) {
+		return 0;
+	}
+
+	for (i = 0; i < BACKLOG; i++) {
+		if (available_ports[i] == false) {
+			return i + STARTING_PORT;
+		}
+	}
+
+	return 0;
 }
