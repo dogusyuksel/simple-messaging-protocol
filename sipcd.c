@@ -1,6 +1,6 @@
 #include "sipc_common.h"
 
-#define VERSION		"00.01"
+#define VERSION		"00.02"
 
 struct port_list_entry {
 	unsigned int port;
@@ -78,13 +78,14 @@ static bool is_port_int_the_list(unsigned int port, struct port_list *port_list)
 
 static int add_new_entry_to_the_port_list(unsigned int port, struct port_list *port_list)
 {
-	struct port_list_entry *entry = (struct port_list_entry *)calloc(1, sizeof(struct port_list_entry));
+	struct port_list_entry *entry = NULL;
 
 	if (!port_list || port < STARTING_PORT || port > STARTING_PORT + BACKLOG) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
+	entry = (struct port_list_entry *)calloc(1, sizeof(struct port_list_entry));
 	if (!entry) {
 		errorf("data is null\n");
 		return NOK;
@@ -99,13 +100,14 @@ static int add_new_entry_to_the_port_list(unsigned int port, struct port_list *p
 
 static int add_new_entry_to_title_list(char *title, unsigned int port, struct title_list *title_list)
 {
-	struct title_list_entry *entry = (struct title_list_entry *)calloc(1, sizeof(struct title_list_entry));
+	struct title_list_entry *entry = NULL;
 
 	if (!title || port < STARTING_PORT || port > STARTING_PORT + BACKLOG || !title_list) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
+	entry = (struct title_list_entry *)calloc(1, sizeof(struct title_list_entry));
 	if (!entry) {
 		errorf("data is null\n");
 		return NOK;
@@ -114,20 +116,21 @@ static int add_new_entry_to_title_list(char *title, unsigned int port, struct ti
 	entry->title = calloc(strlen(title) + 1, sizeof(char));
 	if (!entry->title) {
 		errorf("calloc fail\n");
+		FREE(entry);
 		return NOK;
 	}
 
-	strcpy(entry->title, title);
-	TAILQ_INIT(&(entry->port_list)); 
+	strncpy(entry->title, title, strlen(title));
+	TAILQ_INIT(&(entry->port_list));
+
+	if (add_new_entry_to_the_port_list(port, &(entry->port_list)) == NOK) {
+		errorf("add_new_entry_to_the_port_list() failed\n");
+		FREE(entry->title);
+		FREE(entry);
+		return NOK;
+	}
 
 	TAILQ_INSERT_HEAD(title_list, entry, entries);
-
-	if (is_port_int_the_list(port, &(entry->port_list)) == false) {
-		if (add_new_entry_to_the_port_list(port, &(entry->port_list)) == NOK) {
-			errorf("add_new_entry_to_the_port_list() failed\n");
-			return NOK;
-		}
-	}
 
 	return OK;
 }
@@ -267,21 +270,15 @@ static int sipc_send_packet_daemon(struct _packet *packet, int fd)
 	return OK;
 }
 
-static int sipc_send_daemon(char *title_arg, enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port)
+static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port)
 {
 	int ret = OK;
 	int fd;
 	struct sockaddr_storage address;
 	struct _packet packet;
-	char *title = NULL;
 
-	if (!title_arg) {
-		title = strdup("nonull");
-	} else {
-		title = strdup(title_arg);
-	}
 	if (!title) {
-		errorf("strdup failed\n");
+		errorf("title cannot be NULL\n");
 		goto fail;
 	}
 
@@ -340,7 +337,6 @@ out:
 	close(fd);
 	FREE(packet.title);
 	FREE(packet.payload);
-	FREE(title);
 
 	return ret;
 }
@@ -356,40 +352,12 @@ static int send_data_to_all_title(char *title, char *data, struct title_list *ti
 	}
 
 	if ((entry = find_entry_in_title_list(title, title_list)) == NULL) {
-		debugf("nothing to do\n");
 		return NOK;
 	}
 
 	TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
-		if (sipc_send_daemon(NULL, SENDATA, (void *)data, strlen(data), pentry->port) == NOK) {
+		if (sipc_send_daemon(title, SENDATA, (void *)data, strlen(data), pentry->port) == NOK) {
 			errorf("sipc_send() failed\n");
-		}
-	}
-
-	return OK;
-}
-
-static int send_data_broadcast(char *data, struct title_list *title_list)
-{
-	bool local_port_buffer[BACKLOG] = {0};
-	struct title_list_entry *entry = NULL;
-	struct port_list_entry *pentry = NULL;
-
-	if (!data || !title_list) {
-		errorf("args cannot be NULL\n");
-		return NOK;
-	}
-
-	memset(local_port_buffer, 0, sizeof(bool) * BACKLOG);
-
-	TAILQ_FOREACH(entry, title_list, entries) {
-		TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
-			if (!local_port_buffer[pentry->port - STARTING_PORT] &&
-				sipc_send_daemon(NULL, SENDATA, (void *)data, strlen(data), pentry->port) == NOK) {
-				errorf("sipc_send() failed\n");
-				continue;
-			}
-			local_port_buffer[pentry->port - STARTING_PORT] = true;
 		}
 	}
 
@@ -399,13 +367,14 @@ static int send_data_broadcast(char *data, struct title_list *title_list)
 static int add_data_to_orphan_list(char *title, char *data, struct orphan_list *orphan_list)
 {
 	int ret = OK;
-	struct orphan_list_entry *entry = (struct orphan_list_entry *)calloc(1, sizeof(struct orphan_list_entry));
+	struct orphan_list_entry *entry = NULL;
 
 	if (!orphan_list || !title || !data) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
+	entry = (struct orphan_list_entry *)calloc(1, sizeof(struct orphan_list_entry));
 	if (!entry) {
 		errorf("data is null\n");
 		return NOK;
@@ -413,7 +382,6 @@ static int add_data_to_orphan_list(char *title, char *data, struct orphan_list *
 
 	entry->data = strdup(data);
 	if (!entry->data) {
-		errorf("strdup failed\n");
 		goto fail;
 	}
 
@@ -471,7 +439,7 @@ static int send_orphan_data_first(char *title, unsigned int port, struct orphan_
 	TAILQ_FOREACH(entry, orphan_list, entries) {
 		if (entry->title && strcmp(title, entry->title) == 0) {
 			if (entry->data) {
-				if (sipc_send_daemon(NULL, SENDATA, (void *)entry->data, strlen(entry->data), port) == NOK) {
+				if (sipc_send_daemon(title, SENDATA, (void *)entry->data, strlen(entry->data), port) == NOK) {
 					errorf("sipc_send() failed\n");
 				} else {
 					entry->is_sent = true;
@@ -520,6 +488,12 @@ static int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port,
 
 			lport = strtoul(packet->payload, &ptr, 10);
 			debugf("try to add %d port for the title %s\n", lport, packet->title);
+
+			if (!lport || lport < STARTING_PORT || lport > STARTING_PORT + BACKLOG) {
+				debugf("port is incorrect, continue sliently\n");
+				break;
+			}
+
 			if (remove_port_from_title(packet->title, lport, title_list) == NOK) {
 				errorf("remove_port_from_title() failed\n");
 				goto fail;
@@ -534,6 +508,12 @@ static int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port,
 
 			lport = strtoul(packet->payload, &ptr, 10);
 			debugf("remove %d port from all titles\n",  lport);
+
+			if (!lport || lport < STARTING_PORT || lport > STARTING_PORT + BACKLOG) {
+				debugf("port is incorrect, continue sliently\n");
+				break;
+			}
+
 			if (remove_port_from_all_title(lport, title_list) == NOK) {
 				errorf("remove_port_from_all_title() failed\n");
 				goto fail;
@@ -543,7 +523,7 @@ static int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port,
 		case SENDATA:
 			debugf("send data '%s' to title %s\n",  packet->payload, packet->title);
 			if (send_data_to_all_title(packet->title, packet->payload, title_list) == NOK) {
-				errorf("send_data_to_all_title() failed\n");
+				debugf("send_data_to_all_title() failed, sace data in the orphan list\n");
 				if (add_data_to_orphan_list(packet->title, packet->payload, orphan_list) == NOK) {
 					errorf("add_data_to_orphan() failed\n");
 					goto fail;
@@ -552,14 +532,6 @@ static int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port,
 				}
 			}
 			break;
-		case BROADCAST:
-			debugf("broadcast data '%s' to all clients\n",  packet->payload);
-			if (send_data_broadcast(packet->payload, title_list) == NOK) {
-				errorf("send_data_to_all_title() failed\n");
-				goto fail;
-			}
-			break;
-		
 		default:
 			break;
 	}
@@ -598,7 +570,7 @@ static int sipc_read_data_daemon(int sockfd, struct title_list *title_list, stru
 	unsigned int old_port = 0;
 	unsigned int next_port = 0;
 
-	if (!title_list || !orphan_list || !available_ports) {
+	if (!title_list || !orphan_list || !available_ports || sockfd <= 0) {
 		errorf("args cannot be NULL\n");
 		goto fail;
 	}

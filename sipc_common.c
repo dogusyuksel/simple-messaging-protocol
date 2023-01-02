@@ -143,9 +143,6 @@ char *packet_type_beautiy(enum _packet_type type)
 	case DESTROY:
 		return "DESTROY";
 		break;
-	case BROADCAST:
-		return "BROADCAST";
-		break;
 	default:
 		break;
 	}

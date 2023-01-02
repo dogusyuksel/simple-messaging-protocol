@@ -1,16 +1,25 @@
 #include "sipc_common.h"
 
-struct _thread_data
-{
+struct callback_list_entry {
 	int (*callback)(void *, unsigned int);
-	unsigned int port;
+	char *title;
+	TAILQ_ENTRY(callback_list_entry) entries;
 };
+TAILQ_HEAD(callback_list, callback_list_entry);
+struct sipc_identifier
+{
+	bool server_started;
+	unsigned int port;
+    struct callback_list callback_list;
+};
+
+typedef struct sipc_identifier _sipc_identifier;
+
+static _sipc_identifier identifier;
 
 static int sipc_send_packet(struct _packet *packet, int fd, _sipc_identifier *identifier)
 {
-	unsigned int local_port = *identifier;
-
-	if (!packet || !packet->title || fd < 0) {
+	if (!packet || !packet->title || fd <= 0) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
@@ -46,7 +55,7 @@ static int sipc_send_packet(struct _packet *packet, int fd, _sipc_identifier *id
 	}
 
 	errno = 0;
-	if (send(fd, &local_port, sizeof(local_port), 0) == -1) {
+	if (send(fd, &identifier->port, sizeof(identifier->port), 0) == -1) {
 		errorf("send() failed with %d: %s\n", errno, strerror(errno));
 		return NOK;
 	}
@@ -54,10 +63,57 @@ static int sipc_send_packet(struct _packet *packet, int fd, _sipc_identifier *id
 	return OK;
 }
 
-static int sipc_read_data(int sockfd,  int (*callback)(void *, unsigned int), bool *destoy)
+static struct callback_list_entry * find_callback(char *title, _sipc_identifier *identifier)
+{
+	struct callback_list_entry *entry = NULL;
+
+	if (!title || !identifier) {
+		errorf("args cannot be NULL\n");
+		return NULL;
+	}
+
+	TAILQ_FOREACH(entry, &identifier->callback_list, entries) {
+		if(entry->title && strcmp(entry->title, title) == 0) {
+			return entry;
+		}
+	}
+
+	return NULL;
+}
+
+static int delete_all_callback_list(_sipc_identifier *identifier)
+{
+	struct callback_list_entry *entry1 = NULL;
+	struct callback_list_entry *entry2 = NULL;
+
+	if (!identifier) {
+		errorf("args cannot be NULL\n");
+		return NOK;
+	}
+
+	entry1 = TAILQ_FIRST(&identifier->callback_list);
+	while (entry1 != NULL) {
+		entry2 = TAILQ_NEXT(entry1, entries);
+		FREE(entry1->title);
+		FREE(entry1);
+		entry1 = entry2;
+	}
+
+	TAILQ_INIT(&identifier->callback_list); 
+
+	return OK;
+}
+
+static int sipc_read_data(int sockfd, bool *destroy)
 {
 	int ret = OK;
 	struct _packet packet;
+	struct callback_list_entry *entry = NULL;
+
+	if (sockfd <= 0 || !destroy) {
+		errorf("args cannot be NULL\n");
+		goto fail;
+	}
 
 	memset(&packet, 0, sizeof(struct _packet));
 
@@ -110,11 +166,15 @@ static int sipc_read_data(int sockfd,  int (*callback)(void *, unsigned int), bo
 	}
 
 proceed:
-	if (callback && packet.packet_type == SENDATA && packet.payload_size) {
-		callback(packet.payload, packet.payload_size);
+	if (packet.packet_type == SENDATA && packet.payload && packet.payload_size) {
+		if ((entry = find_callback(packet.title, &identifier)) == NULL) {
+			errorf("cannot find callback\n");
+			goto fail;
+		}
+		entry->callback(packet.payload, packet.payload_size);
 	} else if (packet.packet_type == DESTROY) {
 		debugf("thread wants to be destroyed\n");
-		*destoy = true;
+		*destroy = true;
 	}
 
 	goto out;
@@ -131,7 +191,7 @@ out:
 
 static void *sipc_create_server(void *arg)
 {
-	struct _thread_data *thdata = arg;
+	unsigned int port = 0;
 	int enable = 1;
 	int listen_fd, conn_fd, max_fd, ret_val, i;
 	bool destroy_reuested = false;
@@ -140,16 +200,17 @@ static void *sipc_create_server(void *arg)
 	fd_set backup_set, client_set;
 	struct timeval tv;
 
-	if (!thdata) {
+	if (!(unsigned int *)arg) {
 		errorf("arg is null\n");
 		goto out;
 	}
 
+	port = *((unsigned int *)arg);
 	memset(c_ip_addr, 0, sizeof(c_ip_addr));
 	memset(&server_addr, 0, sizeof(server_addr));
 	memset(&client_addr, 0, sizeof(client_addr));
 
-	if (sipc_fill_wildcard_sockstorage(thdata->port, AF_UNSPEC, &server_addr) != 0) {
+	if (sipc_fill_wildcard_sockstorage(port, AF_UNSPEC, &server_addr) != 0) {
 		errorf("sipc_fill_wildcard_sockstorage() failed\n");
 		goto out;
 	}
@@ -219,7 +280,7 @@ static void *sipc_create_server(void *arg)
 
 		for (i = 0; i <= max_fd; i++) {
 			if (FD_ISSET(i, &client_set) && i != listen_fd) {
-				if (sipc_read_data(i,  thdata->callback, &destroy_reuested) == NOK) {
+				if (sipc_read_data(i, &destroy_reuested) == NOK) {
 					errorf("sipc_read_data() failed\n");
 					goto out;
 				}
@@ -235,20 +296,18 @@ out:
 		FD_CLR(i, &backup_set);
 	}
 
-	FREE(thdata);
 	debugf("thread destroyed\n");
 	pthread_exit(NULL);
 
 	return NULL;
 }
 
-static void create_server_thread(int (*callback)(void *, unsigned int), unsigned int port)
+static void create_server_thread(_sipc_identifier *identifier)
 {
 	pthread_t thread_id;
 	pthread_attr_t thread_attr;
-	struct _thread_data *thdata = NULL;
 
-	if (!callback || !port) {
+	if (!identifier) {
 		errorf("parameters are null\n");
 		goto fail;
 	}
@@ -263,20 +322,13 @@ static void create_server_thread(int (*callback)(void *, unsigned int), unsigned
 		goto fail;
 	}
 
-	thdata = (void *)calloc(1, sizeof(struct _thread_data));
-	if (!thdata) {
-		errorf("calloc failed\n");
-		goto fail;
-	}
-
-	thdata->callback = callback;
-	thdata->port = port;
-
 	errno = 0;
-	if (pthread_create(&thread_id, &thread_attr, sipc_create_server, (void *)thdata) != 0) {
+	if (pthread_create(&thread_id, &thread_attr, sipc_create_server, (void *)(&identifier->port)) != 0) {
 		errorf("pthread_create failure, errno: %d\n", errno);
 		goto fail;
 	}
+
+	identifier->server_started = true;
 
 	goto out;
 
@@ -287,28 +339,99 @@ out:
 	return;
 }
 
-static int sipc_send(char *title_arg, int (*callback)(void *, unsigned int), enum _packet_type packet_type,
+static int delete_callback_from_callback_list(char *title, _sipc_identifier *identifier)
+{
+	struct callback_list_entry *entry = NULL;
+
+	if (!title || !identifier) {
+		errorf("args cannot be NULL\n");
+		return NOK;
+	}
+
+	TAILQ_FOREACH(entry, &identifier->callback_list, entries) {
+		if (entry->title && strcmp(title, entry->title) == 0) {
+			TAILQ_REMOVE(&identifier->callback_list, entry, entries);
+			FREE(entry->title);
+			FREE(entry);
+			break;
+		}
+	}
+
+	return OK;
+}
+
+static int find_callback_in_callback_list(int (*callback)(void *, unsigned int), char *title, _sipc_identifier *identifier)
+{
+	struct callback_list_entry *entry = NULL;
+
+	if (!callback || !identifier || !title) {
+		errorf("args cannot be NULL\n");
+		return NOK;
+	}
+
+	TAILQ_FOREACH(entry, &identifier->callback_list, entries) {
+		if (entry->title && strcmp(title, entry->title) == 0) {
+			entry->callback = callback; //edit callback
+			return OK;
+		}
+	}
+
+	return NOK;
+}
+
+static int add_callback_to_callback_list(int (*callback)(void *, unsigned int), char *title, _sipc_identifier *identifier)
+{
+	struct callback_list_entry *entry = NULL;
+
+	if (!callback || !identifier || !title) {
+		errorf("args cannot be NULL\n");
+		return NOK;
+	}
+
+	entry = (struct callback_list_entry *)calloc(1, sizeof(struct callback_list_entry));
+	if (!entry) {
+		errorf("calloc failed\n");
+		return NOK;
+	}
+
+	entry->callback = callback;
+
+	entry->title = (char *)calloc(1, strlen(title) + 1);
+	if (!entry->title) {
+		errorf("calloc failed\n");
+		FREE(entry->callback);
+		FREE(entry);
+		return NOK;
+	}
+	strcpy(entry->title, title);
+
+	TAILQ_INSERT_HEAD(&identifier->callback_list, entry, entries);
+
+	return OK;
+}
+
+static int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _packet_type packet_type,
 	void *data, unsigned int len, unsigned int _port, _sipc_identifier *identifier)
 {
 	int ret = OK;
 	int fd;
-	unsigned int local_svr_port = *identifier;
+	unsigned int local_svr_port = 0;
 	struct sockaddr_storage address;
 	struct _packet packet;
-	char *title = NULL;
 
-	if (!title_arg) {
-		title = strdup("nonull");
-	} else {
-		title = strdup(title_arg);
+	if (!title || !identifier) {
+		errorf("title cannot be NULL\n");
+		return NOK;
 	}
-	if (!title) {
-		errorf("strdup failed\n");
-		goto fail;
+
+	if (packet_type != REGISTER && !identifier->server_started) {
+		return NOK;
 	}
 
 	memset((void *)&address, 0, sizeof(struct sockaddr_in6));
 	memset(&packet, 0, sizeof(struct _packet));
+
+	local_svr_port = identifier->port;
 
 	if (sipc_buf_to_sockstorage(IPV6_LOOPBACK_ADDR, _port, &address) == NOK) {
 		errorf("sipc_buf_to_sockstorage() failed\n");
@@ -351,24 +474,44 @@ static int sipc_send(char *title_arg, int (*callback)(void *, unsigned int), enu
 		goto fail;
 	}
 
-	if (!local_svr_port) {
-		if (!callback) {
-			errorf("this is the first time register call. 'callback' cannot be NULL\n");
-			goto fail;
-		}
+	if (!identifier->server_started) {
 		if (recv(fd, &local_svr_port, sizeof(unsigned int), 0) == -1) {
 			errorf("recv() failed with %d: %s\n", errno, strerror(errno));
 			goto fail;
 		}
 
 		if (local_svr_port < STARTING_PORT || local_svr_port > STARTING_PORT + BACKLOG) {
-			errorf("port number is invalid\n");
+			debugf("need to register first\n");
+		} else {
+			debugf("port %d initialized for this app\n", local_svr_port);
+			identifier->port = local_svr_port;
+			TAILQ_INIT(&identifier->callback_list);
+			create_server_thread(identifier);
+		}
+	}
+
+	if (packet_type == REGISTER) {
+		if (!callback) {
+			errorf("callback cannot be NULL while registering\n");
 			goto fail;
 		}
-		debugf("port %d initialized for this app\n", local_svr_port);
-		create_server_thread(callback, local_svr_port);
+		if (find_callback_in_callback_list(callback, title, identifier) == NOK) {
+			if (add_callback_to_callback_list(callback, title, identifier) == NOK) {
+				errorf("add_callback_to_callback_list() failed\n");
+				goto fail;
+			}
+		}
+	} else if (packet_type == UNREGISTER) {
+		if (delete_callback_from_callback_list(title, identifier) == NOK) {
+			errorf("delete_callback_from_callback_list() failed\n");
+			goto fail;
+		}
+	} else if (packet_type == UNREGISTER_ALL) {
+		if (delete_all_callback_list(identifier) == NOK) {
+			errorf("delete_all_callback_list() failed\n");
+			goto fail;
+		}
 	}
-	*identifier = local_svr_port;
 
 	goto out;
 
@@ -379,56 +522,35 @@ out:
 	close(fd);
 	FREE(packet.title);
 	FREE(packet.payload);
-	FREE(title);
 
 	return ret;
 }
 
-int sipc_register(_sipc_identifier *identifier, char *title, int (*callback)(void *, unsigned int))
+int sipc_register(char *title, int (*callback)(void *, unsigned int))
 {
-	if (!title || !identifier) {
+	if (!title || !callback) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	return sipc_send(title, callback, REGISTER, NULL, 0, PORT, identifier);
+	return sipc_send(title, callback, REGISTER, NULL, 0, PORT, &identifier);
 }
 
-int sipc_broadcast(_sipc_identifier *identifier, void *data, unsigned int len)
-{
-	if (!data || !len || !identifier) {
-		errorf("args cannot be NULL\n");
-		return NOK;
-	}
-
-	return sipc_send(NULL, NULL, BROADCAST, data, len, PORT, identifier);
-}
-
-static int sipc_unregister_all(_sipc_identifier *identifier)
+static int sipc_unregister_all(void)
 {
 	char unreg_buf[256] = {0};
 
-	if (!identifier) {
-		errorf("args cannot be NULL\n");
-		return NOK;
-	}
+	snprintf(unreg_buf, sizeof(unreg_buf), "%d", identifier.port);
 
-	snprintf(unreg_buf, sizeof(unreg_buf), "%d", *identifier);
-
-	return sipc_send(NULL, NULL, UNREGISTER_ALL, unreg_buf, strlen(unreg_buf), PORT, identifier);
+	return sipc_send(DUMMY_STRING, NULL, UNREGISTER_ALL, unreg_buf, strlen(unreg_buf), PORT, &identifier);
 }
 
-int sipc_destroy(_sipc_identifier *identifier)
+int sipc_destroy(void)
 {
-	if (!identifier) {
-		errorf("args cannot be NULL\n");
+	if (sipc_unregister_all() == NOK) {
 		return NOK;
 	}
-
-	if (sipc_unregister_all(identifier) == NOK) {
-		return NOK;
-	}
-	if (sipc_send(NULL, NULL, DESTROY, NULL, 0, *identifier, identifier) == NOK) {
+	if (sipc_send(DUMMY_STRING, NULL, DESTROY, NULL, 0, identifier.port, &identifier) == NOK) {
 		return NOK;
 	}
 
@@ -437,25 +559,25 @@ int sipc_destroy(_sipc_identifier *identifier)
 	return OK;
 }
 
-int sipc_unregister(_sipc_identifier *identifier, char *title)
+int sipc_unregister(char *title)
 {
 	char unreg_buf[256] = {0};
 
-	if (!title || !identifier) {
+	if (!title) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	snprintf(unreg_buf, sizeof(unreg_buf), "%d", *identifier);
-	return sipc_send(title, NULL, UNREGISTER, unreg_buf, strlen(unreg_buf), PORT, identifier);
+	snprintf(unreg_buf, sizeof(unreg_buf), "%d", identifier.port);
+	return sipc_send(title, NULL, UNREGISTER, unreg_buf, strlen(unreg_buf), PORT, &identifier);
 }
 
-int sipc_send_data(_sipc_identifier *identifier, char *title, void *data, unsigned int len)
+int sipc_send_data(char *title, void *data, unsigned int len)
 {
-	if (!title || !data || !len || !identifier) {
+	if (!title || !data || !len) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	return sipc_send(title, NULL, SENDATA, data, len, PORT, identifier);
+	return sipc_send(title, NULL, SENDATA, data, len, PORT, &identifier);
 }

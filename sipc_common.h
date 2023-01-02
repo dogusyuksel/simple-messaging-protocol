@@ -36,8 +36,6 @@
 #define IPV4_LOOPBACK_ADDR		"127.0.0.1"
 #define DEFAULT_LOCALHOST_IFACE	"lo"
 
-#define IDENTIFIER_INIT			0
-
 #define ANSI_COLOR_RED		"\x1b[31m"
 #define ANSI_COLOR_GREEN	"\x1b[32m"
 #define ANSI_COLOR_YELLOW	"\x1b[33m"
@@ -52,6 +50,8 @@
 #define debugf(...)		
 #endif
 #define errorf(...)		fprintf(stderr, ANSI_COLOR_RED"[%d]\t", __LINE__);fprintf(stderr, __VA_ARGS__);fprintf(stderr, ANSI_COLOR_RESET)
+
+#define DUMMY_STRING	"dummyStr"
 
 #define FREE(p)			{										\
 							if (p) {							\
@@ -68,16 +68,13 @@
 							}									\
 						}
 
-typedef unsigned int _sipc_identifier;
-
 enum _packet_type
 {
 	REGISTER,
 	SENDATA,
 	UNREGISTER,
 	UNREGISTER_ALL,
-	DESTROY,
-	BROADCAST
+	DESTROY
 };
 
 struct _packet
