@@ -6,6 +6,7 @@ struct port_list_entry {
 	unsigned int port;
 	TAILQ_ENTRY(port_list_entry) entries;
 };
+
 TAILQ_HEAD(port_list, port_list_entry);
 
 struct title_list_entry {
@@ -13,6 +14,7 @@ struct title_list_entry {
 	struct port_list port_list;
 	TAILQ_ENTRY(title_list_entry) entries;
 };
+
 TAILQ_HEAD(title_list, title_list_entry);
 
 struct orphan_list_entry {
@@ -21,6 +23,7 @@ struct orphan_list_entry {
 	bool is_sent;
 	TAILQ_ENTRY(orphan_list_entry) entries;
 };
+
 TAILQ_HEAD(orphan_list, orphan_list_entry);
 
 static struct title_list title_list;
@@ -684,7 +687,7 @@ static void sipc_create_server_daemon(struct title_list *title_list, struct orph
 		goto out;
 	}
 
-	if(setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR , &enable, sizeof(int)) < 0) {
+	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR , &enable, sizeof(int)) < 0) {
 		errorf("setsockopt reuseport fail\n");
 		goto out;
 	}

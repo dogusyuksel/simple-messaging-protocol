@@ -5,12 +5,14 @@ struct callback_list_entry {
 	char *title;
 	TAILQ_ENTRY(callback_list_entry) entries;
 };
+
 TAILQ_HEAD(callback_list, callback_list_entry);
+
 struct sipc_identifier
 {
 	bool server_started;
 	unsigned int port;
-    struct callback_list callback_list;
+	struct callback_list callback_list;
 };
 
 typedef struct sipc_identifier _sipc_identifier;
@@ -73,7 +75,7 @@ static struct callback_list_entry * find_callback(char *title, _sipc_identifier 
 	}
 
 	TAILQ_FOREACH(entry, &identifier->callback_list, entries) {
-		if(entry->title && strcmp(entry->title, title) == 0) {
+		if (entry->title && strcmp(entry->title, title) == 0) {
 			return entry;
 		}
 	}
@@ -220,7 +222,7 @@ static void *sipc_create_server(void *arg)
 		goto out;
 	}
 
-	if(setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR , &enable, sizeof(int)) < 0) {
+	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR , &enable, sizeof(int)) < 0) {
 		errorf("setsockopt reuseport fail\n");
 		goto out;
 	}
