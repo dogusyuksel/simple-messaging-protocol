@@ -34,21 +34,36 @@ int main(int argc, char **argv)
 
 	signal(SIGINT, sigint_handler);
 
-	sipc_register("App_A_Registered_title", &my_callback);
-	sipc_register("App_A_To_Itself", &my_callback2);
+	if (sipc_register("App_A_Registered_title", &my_callback) == NOK) {
+		errorf("sipc_register() failed\n");
+		goto out;
+	}
+	if (sipc_register("App_A_To_Itself", &my_callback2) == NOK) {
+		errorf("sipc_register() failed\n");
+		goto out;
+	}
 
 	for (i = 0; i < 2; i++) {
 		sleep(1);	//no need normally. To see smooth logs
 
 		memset(send_buf, 0, sizeof(send_buf));
 		snprintf(send_buf, sizeof(send_buf), (char *)"data %d to myself", (10 - i));
-		sipc_send_data("App_A_To_Itself", send_buf, strlen(send_buf));
+		if (sipc_send_data("App_A_To_Itself", send_buf, strlen(send_buf)) == NOK) {
+			errorf("sipc_send_data() failed\n");
+			goto out;
+		}
+		snprintf(send_buf, sizeof(send_buf), (char *)"bcast data %d", i);
+		if (sipc_bradcast_data(send_buf, strlen(send_buf)) == NOK) {
+			errorf("sipc_send_data() failed\n");
+			goto out;
+		}
 	}
 
 	while(1) {
 		sleep(10); //wait forever
 	}
 
+out:
 	sipc_unregister("App_A_Registered_title");
 	sipc_unregister("App_A_To_Itself");
 

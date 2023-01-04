@@ -45,6 +45,7 @@ static bool sipc_ipv6_supported(void)
 int sipc_fill_wildcard_sockstorage(unsigned short port, unsigned int scktype, struct sockaddr_storage *addr)
 {
 	bool ipv6_supported = sipc_ipv6_supported();
+
 	if (!addr) {
 		return NOK;
 	}
@@ -53,14 +54,14 @@ int sipc_fill_wildcard_sockstorage(unsigned short port, unsigned int scktype, st
 		if (ipv6_supported) {
 			return sipc_buf_to_sockstorage(IPV6_WILDCARD_ADDR, port, addr);
 		}
-		return sipc_buf_to_sockstorage(IPV4_WILDCARD_ADDR, port, addr);
+		return sipc_buf_to_sockstorage(INADDR_ANY, port, addr);
 	}
 
 	if (ipv6_supported && scktype == AF_INET6) {
 		return sipc_buf_to_sockstorage(IPV6_WILDCARD_ADDR, port, addr);
 	}
 
-	return sipc_buf_to_sockstorage(IPV4_WILDCARD_ADDR, port, addr);
+	return sipc_buf_to_sockstorage(INADDR_ANY, port, addr);
 }
 
 int sipc_buf_to_sockstorage(const char *addr, unsigned short port, struct sockaddr_storage *converted_addr)

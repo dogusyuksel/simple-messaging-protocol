@@ -15,6 +15,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <signal.h>
+#include <netinet/in.h>
+#include <sys/un.h>
 
 #define UNUSED(__val__)		((void)__val__)
 
@@ -32,9 +34,8 @@
 
 #define IPV6_WILDCARD_ADDR		"::"
 #define IPV6_LOOPBACK_ADDR		"::1"
-#define IPV4_WILDCARD_ADDR		"0.0.0.0"
-#define IPV4_LOOPBACK_ADDR		"127.0.0.1"
-#define DEFAULT_LOCALHOST_IFACE	"lo"
+
+#define BROADCAST_UNIQUE_TITLE	"IbrgRxsfhAneuj4d4V7q_SFC8RtJTuvwSsMHPXctL-bnp757OXy7dHxDn8tpE6"
 
 #define ANSI_COLOR_RED		"\x1b[31m"
 #define ANSI_COLOR_GREEN	"\x1b[32m"

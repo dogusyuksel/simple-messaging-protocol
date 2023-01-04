@@ -16,7 +16,7 @@ It is easy to use with couple of API calls and integrating to other application 
 ## Important Notes
 - sipcd must be executed before other applications' registration
 - sipcd can serve number of 'BACKLOG' applications
-- If an application sends data to a title and if there is no application registered to this title before, we are calling this data as orphan. sipcd queues these orphan data and serves them when an application registers the specified title. Please note that, after sending these orphans to any related application, these data are cleared. It means, queuing system works just for once for the first registered application to the orphan title.
+- If an application sends data to a title and if there is **no** application registered to this title before, we are calling this data as orphan. sipcd queues these orphan data and serves them when an application registers the specified title. Please note that, these data are not cleared. It means, if there will a new rgistiration to any orphan title, and if the new registration came from a new application, the new registered application will get these old orphan data.
 
 ## How To Use
 
