@@ -31,9 +31,9 @@ static struct orphan_list orphan_list;
 static bool available_port_map[BACKLOG] = {0};
 
 static struct option parameters[] = {
-	{ "help",				no_argument,		0,	0x100	},
-	{ "version",			no_argument,		0,	0x101	},
-	{ NULL,					0,					0, 	0 		},
+	{ "help",				no_argument,		0,	'h'	},
+	{ "version",			no_argument,		0,	'v'	},
+	{ NULL,					0,					0, 	0 	},
 };
 
 static void print_help_exit (char *arg)
@@ -41,9 +41,9 @@ static void print_help_exit (char *arg)
 	if (!arg) {
 		return;
 	}
-	debugf("\nhelp for %s\n\n", arg);
+	printf("\n%s help:\n\n", arg);
 
-	debugf("--version:\treturns version\n");
+	printf("--version:\t('v')\n\t\treturns version\n\n");
 
 	exit(OK);
 }
@@ -975,12 +975,12 @@ int main(int argc, char **argv)
 
 	signal(SIGINT, sigint_handler);
 
-	while ((c = getopt_long(argc, argv, "h", parameters, &o)) != -1) {
+	while ((c = getopt_long(argc, argv, "hv", parameters, &o)) != -1) {
 		switch (c) {
-			case 0x100:
+			case 'h':
 				print_help_exit(argv[0]);
 				break;
-			case 0x101:
+			case 'v':
 				debugf("%s version %s\n", argv[0], VERSION);
 				return OK;
 				break;
