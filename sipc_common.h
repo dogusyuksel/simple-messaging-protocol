@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdarg.h>
 #include <getopt.h>
 #include <errno.h>
 #include <sys/queue.h>

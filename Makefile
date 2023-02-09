@@ -3,7 +3,7 @@ include Config
 
 CC = gcc
 RM = rm -rf
-CFLAGS = -Wall -Wextra -Werror -g3 -O0 -fPIC -DOPEN_DEBUG
+CFLAGS = -Wall -Wextra -Werror -Wno-varargs -g3 -O0 -fPIC -DOPEN_DEBUG
 TARGET_EXECUTABLE_NAME=sipcd
 TARGET_LIBRARY_NAME=libsipc.so
 

@@ -21,7 +21,7 @@ static _sipc_identifier identifier;
 
 static int sipc_send_packet(struct _packet *packet, int fd)
 {
-	if (!packet || !packet->title || fd <= 0) {
+	if (!packet || !packet->title || fd < 0) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
@@ -107,7 +107,7 @@ static int sipc_read_data(int sockfd, bool *destroy)
 	struct _packet packet;
 	struct callback_list_entry *entry = NULL;
 
-	if (sockfd <= 0 || !destroy) {
+	if (sockfd < 0 || !destroy) {
 		errorf("args cannot be NULL\n");
 		goto fail;
 	}
@@ -411,11 +411,12 @@ static int add_callback_to_callback_list(int (*callback)(void *, unsigned int), 
 }
 
 static int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _packet_type packet_type,
-	void *data, unsigned int len, unsigned int _port)
+	void *data, unsigned int len, unsigned int _port, unsigned long timeout)
 {
-	int ret = OK;
-	int fd;
+	int ret = NOK;
+	int fd  = - 1;
 	unsigned int local_svr_port = 0;
+	unsigned long timeout_cnt = 0;
 	struct sockaddr_storage address;
 	struct _packet packet;
 
@@ -438,14 +439,28 @@ static int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _p
 		return NOK;
 	}
 
-	fd = sipc_socket_open_use_buf(IPV6_LOOPBACK_ADDR, SOCK_STREAM,0);
-	if (fd == -1) {
-		errorf("socket() failed with %d: %s\n", errno, strerror(errno));
-		return NOK;
+	while (timeout_cnt <= timeout) {
+		close(fd);
+		sleep(1);
+		timeout_cnt++;
+
+		fd = sipc_socket_open_use_buf(IPV6_LOOPBACK_ADDR, SOCK_STREAM, 0);
+		if (fd == -1) {
+			errorf("socket() failed with %d: %s\n", errno, strerror(errno));
+			continue;
+		}
+
+		if (sipc_connect_socket(fd, (struct sockaddr*)&address) < 0) {
+			errorf("connect() failed with %d: %s\n", errno, strerror(errno));
+			continue;
+		}
+
+		ret = OK;
+		break;
 	}
 
-	if (sipc_connect_socket(fd, (struct sockaddr*)&address) == NOK) {
-		errorf("connect() failed with %d: %s\n", errno, strerror(errno));
+	if (ret != OK || fd < 0) {
+		debugf("retry failed\n");
 		goto fail;
 	}
 
@@ -526,14 +541,26 @@ out:
 	return ret;
 }
 
-int sipc_register(char *title, int (*callback)(void *, unsigned int))
+int sipc_register(char *title, int (*callback)(void *, unsigned int), ...)
 {
+	va_list args;
+	const char *fmt = "%d";
+	char buffer[BUFFER_SIZE];
+	char *ptr = NULL;
+	unsigned long timeout = 0;
+
 	if (!title || !callback) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	return sipc_send(title, callback, REGISTER, NULL, 0, PORT);
+	va_start(args, fmt);
+	vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
+	va_end(args);
+
+	timeout = strtoul(buffer, &ptr, 10);
+
+	return sipc_send(title, callback, REGISTER, NULL, 0, PORT, timeout);
 }
 
 static int sipc_unregister_all(void)
@@ -542,7 +569,7 @@ static int sipc_unregister_all(void)
 
 	snprintf(unreg_buf, sizeof(unreg_buf), "%d", identifier.port);
 
-	return sipc_send(DUMMY_STRING, NULL, UNREGISTER_ALL, unreg_buf, strlen(unreg_buf), PORT);
+	return sipc_send(DUMMY_STRING, NULL, UNREGISTER_ALL, unreg_buf, strlen(unreg_buf), PORT, 0);
 }
 
 int sipc_destroy(void)
@@ -550,7 +577,7 @@ int sipc_destroy(void)
 	if (sipc_unregister_all() == NOK) {
 		return NOK;
 	}
-	if (sipc_send(DUMMY_STRING, NULL, DESTROY, NULL, 0, identifier.port) == NOK) {
+	if (sipc_send(DUMMY_STRING, NULL, DESTROY, NULL, 0, identifier.port, 0) == NOK) {
 		return NOK;
 	}
 
@@ -569,32 +596,68 @@ int sipc_unregister(char *title)
 	}
 
 	snprintf(unreg_buf, sizeof(unreg_buf), "%d", identifier.port);
-	return sipc_send(title, NULL, UNREGISTER, unreg_buf, strlen(unreg_buf), PORT);
+	return sipc_send(title, NULL, UNREGISTER, unreg_buf, strlen(unreg_buf), PORT, 0);
 }
 
-int sipc_send_data(char *title, void *data, unsigned int len)
+int sipc_send_data(char *title, void *data, unsigned int len, ...)
 {
+	va_list args;
+	const char *fmt = "%d";
+	char buffer[BUFFER_SIZE];
+	char *ptr = NULL;
+	unsigned long timeout = 0;
+
 	if (!title || !data || !len) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	return sipc_send(title, NULL, SENDATA, data, len, PORT);
+	va_start(args, fmt);
+	vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
+	va_end(args);
+
+	timeout = strtoul(buffer, &ptr, 10);
+
+	return sipc_send(title, NULL, SENDATA, data, len, PORT, timeout);
 }
 
-int sipc_bradcast_data(void *data, unsigned int len)
+int sipc_send_bradcast_data(void *data, unsigned int len, ...)
 {
+	va_list args;
+	const char *fmt = "%d";
+	char buffer[BUFFER_SIZE];
+	char *ptr = NULL;
+	unsigned long timeout = 0;
+
 	if (!data || !len) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	return sipc_send(BROADCAST_UNIQUE_TITLE, NULL, SENDATA, data, len, PORT);
+	va_start(args, fmt);
+	vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
+	va_end(args);
+
+	timeout = strtoul(buffer, &ptr, 10);
+
+	return sipc_send(BROADCAST_UNIQUE_TITLE, NULL, SENDATA, data, len, PORT, timeout);
 }
 
-int sipc_broadcast_register(int (*callback)(void *, unsigned int))
+int sipc_broadcast_register(int (*callback)(void *, unsigned int), ...)
 {
-	return sipc_register(BROADCAST_UNIQUE_TITLE, callback);
+	va_list args;
+	const char *fmt = "%d";
+	char buffer[BUFFER_SIZE];
+	char *ptr = NULL;
+	unsigned long timeout = 0;
+
+	va_start(args, fmt);
+	vsnprintf(buffer, sizeof(buffer) - 1, fmt, args);
+	va_end(args);
+
+	timeout = strtoul(buffer, &ptr, 10);
+
+	return sipc_register(BROADCAST_UNIQUE_TITLE, callback, timeout);
 }
 
 int sipc_broadcast_unregister(void)

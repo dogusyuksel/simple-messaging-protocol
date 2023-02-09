@@ -34,7 +34,7 @@ int main(int argc, char **argv)
 
 	signal(SIGINT, sigint_handler);
 
-	if (sipc_register("App_A_Registered_title", &my_callback) == NOK) {
+	if (sipc_register("App_A_Registered_title", &my_callback, 10) == NOK) {
 		errorf("sipc_register() failed\n");
 		goto out;
 	}
@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 			goto out;
 		}
 		snprintf(send_buf, sizeof(send_buf), (char *)"bcast data %d", i);
-		if (sipc_bradcast_data(send_buf, strlen(send_buf)) == NOK) {
+		if (sipc_send_bradcast_data(send_buf, strlen(send_buf)) == NOK) {
 			errorf("sipc_send_data() failed\n");
 			goto out;
 		}

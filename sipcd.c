@@ -374,13 +374,13 @@ static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *da
 		return NOK;
 	}
 
-	fd = sipc_socket_open_use_buf(IPV6_LOOPBACK_ADDR, SOCK_STREAM,0);
+	fd = sipc_socket_open_use_buf(IPV6_LOOPBACK_ADDR, SOCK_STREAM, 0);
 	if (fd == -1) {
 		errorf("socket() failed with %d: %s\n", errno, strerror(errno));
 		return NOK;
 	}
 
-	if (sipc_connect_socket(fd, (struct sockaddr*)&address) == NOK) {
+	if (sipc_connect_socket(fd, (struct sockaddr*)&address) < 0) {
 		errorf("connect() failed with %d: %s\n", errno, strerror(errno));
 		goto fail;
 	}
@@ -655,7 +655,7 @@ static int sipc_read_data_daemon(int sockfd, struct title_list *title_list, stru
 	unsigned int old_port = 0;
 	unsigned int next_port = 0;
 
-	if (!title_list || !orphan_list || !available_ports || sockfd <= 0) {
+	if (!title_list || !orphan_list || !available_ports || sockfd < 0) {
 		errorf("args cannot be NULL\n");
 		goto fail;
 	}

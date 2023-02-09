@@ -137,25 +137,29 @@ There is no special arguments except "help" and "version".
 <h2 id="api-details"> API Details</h2>
 
 
-> __int sipc_register(char *title, int (*callback)(void *, unsigned int));__  
+> ___int sipc_register(char *title, int (*callback)(void *, unsigned int), unsigned int timeout);__  
 >> This function is used to register a 'title'  
+>> timeout arg is optional  
 >> 'callback' is the callback function that automatically executed if there is any incoming data. Passing args to that callback are data itself and its length  
 >> eg callback definition: **int my_callback(void *prm, unsigned int len)**  
 >> Please note that, it is recommanded that callback functions' content should be light weight or thread safe
 
-> __int sipc_send_data(char *title, void *data, unsigned int len);__  
+> ___int sipc_send_data(char *title, void *data, unsigned int len);__  
 >> used to send data to specific 'title' listeners  
 
-> __int sipc_unregister(char *title);__  
+> ___int sipc_send_bradcast_data(char *title, void *data, unsigned int len);__  
+>> used to send broadcast data to specific 'title' listeners  
+
+> ___int sipc_unregister(char *title);__  
 >> used to be removed from 'title' caller list  
 
-> __int sipc_broadcast_register(int (*callback)(void *, unsigned int));__  
+> ___int sipc_broadcast_register(int (*callback)(void *, unsigned int));__  
 >> used to register to broadcasted data  
 
-> __int sipc_broadcast_unregister(void);__  
+> ___int sipc_broadcast_unregister(void);__  
 >> used to unregister broadcasted data  
 
-> __int sipc_destroy(void);__  
+> ___int sipc_destroy(void);__  
 >> used for freed all allocated memories hold by the library  
 
 ![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png)
@@ -163,7 +167,7 @@ There is no special arguments except "help" and "version".
 <!-- LIMITS -->
 <h2 id="limitations"> Limitations</h2>
 
-* sipcd must be executed before other applications' registration
+* sipcd must be executed before other applications' registration. You may use register function as blocking with timeout parameter
 * sipcd can serve number of 'BACKLOG' applications defined in "s,pc_common.h"
 * If an application sends data to a title and if there is **no** application registered to this title before, we are calling this data as orphan. sipcd queues these orphan data and serves them when an application registers the specified title. Please note that, these data are not cleared. It means, if there will a new rgistiration to any orphan title, and if the new registration came from a new application, the new registered application will get these old orphan data.
 
