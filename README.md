@@ -120,7 +120,7 @@ There is no special arguments except "help" and "version".
 2. After compilation, libsipcc.so should be created under the libsipcc folder.
 3. After the library creation, test applications can be run
     - Note that, you can run the test application multiple times to observe sending data to eachother.
-    - At least one atg should be given to the test app which will be the title to be listened by the app
+    - At least one arg should be given to the test app which will be the title to be listened by the app
     - After execution, you may type "\<title\>\<space\>\<data\>" format to send data to other (or itself) applications
 4. Then you are OK.
 
