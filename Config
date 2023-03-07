@@ -1,1 +1,4 @@
+COMMON_PATH=common
+LIBSIPCC_PATH=libsipcc
+LIBRARY_NAME=sipcc
 OPEN_DEBUG=y

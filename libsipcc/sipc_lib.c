@@ -190,7 +190,7 @@ static void *sipc_create_server(void *arg)
 {
 	unsigned int port = 0;
 	int enable = 1;
-	int listen_fd, conn_fd, max_fd, ret_val, i;
+	int listen_fd, conn_fd, max_fd = 1, ret_val, i;
 	bool destroy_reuested = false;
 	struct sockaddr_storage client_addr, server_addr;
 	char c_ip_addr[INET6_ADDRSTRLEN] = {0};

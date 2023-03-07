@@ -1,0 +1,20 @@
+TEST_EXECUTABLE_NAME=test
+
+LDFLAGS += -l${LIB_NAME}
+
+TEST_INCDIR=-I ${LIB_INCDIR} -I ${COMMON_INCDIR}
+TEST_LIBDIR=-L ${LIB_DIR}
+
+C_SRCS = \
+test.c
+
+OBJS += \
+./test.o
+
+.PHONY: all clean
+
+all:
+	$(CC) -o ./$(TEST_EXECUTABLE_NAME) $(C_SRCS) $(CFLAGS) $(LDFLAGS) $(TEST_LIBDIR) $(TEST_INCDIR)
+
+clean:
+	$(RM) $(OBJS) ./$(TEST_EXECUTABLE_NAME)

@@ -1,0 +1,14 @@
+#!/bin/bash
+source ./Config
+
+OUTPUT=$(env | grep LD_LIBRARY_PATH | cut -d ";" -f 2)
+PWD=$(pwd)
+
+VARIABLE_PART=`echo $OUTPUT | cut -d "=" -f 2`
+LEN=`echo $VARIABLE_PART | awk '{print length}'`
+
+if [ "$LEN" -eq "0" ]; then
+   export LD_LIBRARY_PATH=$PWD/$LIBSIPCC_PATH
+else
+    export LD_LIBRARY_PATH=$PWD/$LIBSIPCC_PATH:$VARIABLE_PART
+fi

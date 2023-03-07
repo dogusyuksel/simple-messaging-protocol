@@ -62,47 +62,39 @@ No third party packets used in this project.
     │
     ├── pictures
     │   ├── simple_ipc.png
-    ├── test-app-A
-    │   ├── application_A.c
-    │   ├── Config
-    │   ├── environment
+    ├── common
+    │   ├── include
+    |       ├── sipc_common.h
+    │   ├── sipc_common.c
     │   ├── Makefile
-    ├── test-app-B
-    │   ├── application_B.c
-    │   ├── Config
-    │   ├── environment
+    ├── daemon
+    │   ├── daemon.c
+    │   ├── Makefile
+    ├── libsipcc
+    │   ├── include
+    |       ├── sipc_lib.h
+    │   ├── sipc_lib.c
+    │   ├── Makefile
+    ├── test
+    │   ├── test.c
     │   ├── Makefile
     │
     ├── Config
     ├── LICENSE 
     ├── Makefile  
     ├── README.md 
-    ├── sipc_common.c  
-    ├── sipc_common.h   
-    ├── sipcd.c  
-    ├── sipc_lib.c  
-    ├── sipc_lib.h
+    ├── environment  
 
 * pictures folder: contains pictures used in the README.md file.
-* test-app-A folder: contains example application that use simple ipc api.
-    * application_A.c file: simple application source code
-    * Config file: contains library and head files path
-    * environment file: a script to LD_LIBRARY_PATH to use the library in runtime
-    * Makefile: makefile to compile the program
-* test-app-B folder: contains example application that use simple ipc api.
-    * application_A.c file: simple application source code
-    * Config file: contains library and head files path
-    * environment file: a script to LD_LIBRARY_PATH to use the library in runtime
-    * Makefile: makefile to compile the program
+* test folder: contains example application that use simple ipc api.
+* common folder: contains common functions for library and daemon.
+* daemon folder: contains manager application source codes.
+* libsipcc folder: contains source codes to generate library
 * Config file: contains debug open option
 * LICENSE file: contains license information
 * Makefile: makefile to compile the program
 * README.md file: readme itself
-* sipc_common.c file: A common source file that is used by sipcd (simple ipc daemon) and sipcc (simple ipc clients, the applications use the sipc library)
-* sipc_common.h file: A common header file that is used by sipcd (simple ipc daemon) and sipcc (simple ipc clients, the applications use the sipc library)
-* sipcd.c file: Simple IPC Daemon main source code
-* sipc_lib.c file: Main source file that the library generates  
-* test.log file: Main header file that the library generates  
+* environment file: arrange LD_LIBRARY_PATH environment to execute test application which uses the dynmaic library  
 
 ![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png)
 
@@ -123,13 +115,14 @@ There is no special arguments except "help" and "version".
 <!-- HOWTO -->
 <h2 id="how-to-use"> How to Use</h2>
 
-1. sipcd daemon should be compiled and started first. This is the manager daemon and must be started before other daemons' registration!
+1. type "make" and start "sipcd" first which is the manager app in the daemon folder.
     - Note that, you may type 'n' the OPEN_DEBUG config in the 'Config' file to disable debugs
-2. After compilation, libsipc.so should be created in the current directory.
-3. After the library creation, test applications can be compiled and run
-    - Note that, you need to configure the paths in the 'Config' file first (Config file exists for test-app-A and test-app-B separately)
-4.  Then, you need to execute the 'source environment' command. This is necessary for the applications to find the libsipc.so in runtime
-5. Then you are OK. Test applications can be run
+2. After compilation, libsipcc.so should be created under the libsipcc folder.
+3. After the library creation, test applications can be run
+    - Note that, you can run the test application multiple times to observe sending data to eachother.
+    - At least one atg should be given to the test app which will be the title to be listened by the app
+    - After execution, you may type "\<title\>\<space\>\<data\>" format to send data to other (or itself) applications
+4. Then you are OK.
 
 ![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png)
 

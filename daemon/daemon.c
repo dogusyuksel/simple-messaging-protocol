@@ -357,7 +357,7 @@ static int sipc_send_packet_daemon(struct _packet *packet, int fd)
 static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port)
 {
 	int ret = OK;
-	int fd;
+	int fd = 0;
 	struct sockaddr_storage address;
 	struct _packet packet;
 
@@ -418,7 +418,9 @@ fail:
 	ret = NOK;
 
 out:
-	close(fd);
+	if (fd) {
+		close(fd);
+	}
 	FREE(packet.title);
 	FREE(packet.payload);
 
@@ -495,7 +497,6 @@ success:
 
 static int send_orphan_data_first(char *title, unsigned int port, struct orphan_list *orphan_list)
 {
-	unsigned int i = 0;
 	bool should_send = true;
 	struct orphan_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
@@ -799,7 +800,7 @@ static int sipc_create_server_daemon(struct title_list *title_list, struct orpha
 {
 	int ret = OK;
 	int enable = 1;
-	int listen_fd, conn_fd, max_fd, ret_val, i;
+	int listen_fd, conn_fd, max_fd = 1, ret_val, i;
 	struct sockaddr_storage client_addr, server_addr;
 	char c_ip_addr[INET6_ADDRSTRLEN] = {0};
 	fd_set backup_set, client_set;
