@@ -1,6 +1,6 @@
 #include "sipc_common.h"
 
-#define VERSION		"00.03"
+#define VERSION		"00.04"
 
 struct port_list_entry {
 	unsigned int port;
