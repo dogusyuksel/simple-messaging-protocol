@@ -316,40 +316,42 @@ static int remove_port_from_all_title(unsigned int port, struct title_list *titl
 
 static int sipc_send_packet_daemon(struct _packet *packet, int fd)
 {
+
+	char buffer[BUFFER_SIZE] = {0};
+	json_object *message = NULL;
+
 	if (!packet || !packet->title || fd < 0) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
+	message = json_object_new_object();
+	if (message == NULL) {
+		return NOK;
+	}
+	json_object_object_add(message, JSON_STR_TYPE, json_object_new_int((unsigned int)packet->packet_type));
+	json_object_object_add(message, JSON_STR_PORT, json_object_new_int(packet->port));
+	if (packet->title) {
+		json_object_object_add(message, JSON_STR_TITLE, json_object_new_string(packet->title));
+	} else {
+		json_object_object_add(message, JSON_STR_TITLE, json_object_new_string(JSON_STR_EMPTY));
+	}
+	if (packet->payload) {
+		json_object_object_add(message, JSON_STR_PAYLOAD, json_object_new_string(packet->payload));
+	} else {
+		json_object_object_add(message, JSON_STR_PAYLOAD, json_object_new_string(JSON_STR_EMPTY));
+	}
+
+	strncpy(buffer, json_object_to_json_string(message), sizeof(buffer));
+	debugf("%s\n", buffer);
+
 	errno = 0;
-	if (send(fd, &packet->packet_type, sizeof(packet->packet_type), MSG_NOSIGNAL) == -1) {
+	if (send(fd, buffer, strlen(buffer), MSG_NOSIGNAL) == -1) {
 		errorf("send() failed with %d: %s\n", errno, strerror(errno));
 		return NOK;
 	}
 
-	errno = 0;
-	if (send(fd, &packet->title_size, sizeof(packet->title_size), MSG_NOSIGNAL) == -1) {
-		errorf("send() failed with %d: %s\n", errno, strerror(errno));
-		return NOK;
-	}
-
-	errno = 0;
-	if (packet->title_size && send(fd, packet->title, packet->title_size, MSG_NOSIGNAL) == -1) {
-		errorf("send() failed with %d: %s\n", errno, strerror(errno));
-		return NOK;
-	}
-
-	errno = 0;
-	if (send(fd, &packet->payload_size, sizeof(packet->payload_size), MSG_NOSIGNAL) == -1) {
-		errorf("send() failed with %d: %s\n", errno, strerror(errno));
-		return NOK;
-	}
-
-	errno = 0;
-	if (packet->payload_size && packet->payload && send(fd, packet->payload, packet->payload_size, MSG_NOSIGNAL) == -1) {
-		errorf("send() failed with %d: %s\n", errno, strerror(errno));
-		return NOK;
-	}
+	json_object_put(message);
 
 	return OK;
 }
@@ -360,6 +362,9 @@ static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *da
 	int fd = 0;
 	struct sockaddr_storage address;
 	struct _packet packet;
+
+	packet.title = NULL;
+	packet.payload = NULL;
 
 	if (!title) {
 		errorf("title cannot be NULL\n");
@@ -390,10 +395,7 @@ static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *da
 		errorf("strdup failed\n");
 		goto fail;
 	}
-	packet.title_size = strlen(title) + 1;
 	packet.packet_type = (unsigned char)packet_type;
-	packet.payload_size = 0;
-	packet.payload = NULL;
 
 	if (data && len) {
 		packet.payload = (void *)calloc(1, len + 1);
@@ -402,7 +404,6 @@ static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *da
 			goto fail;
 		}
 		strncpy(packet.payload, data, len);
-		packet.payload_size = len + 1;
 
 		debugf("send data '%s' to port '%d'\n", packet.payload, _port);
 	}
@@ -497,6 +498,9 @@ success:
 
 static int send_orphan_data_first(char *title, unsigned int port, struct orphan_list *orphan_list)
 {
+#ifdef OPEN_DEBUG
+	unsigned int i = 0;
+#endif
 	bool should_send = true;
 	struct orphan_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
@@ -534,16 +538,18 @@ static int send_orphan_data_first(char *title, unsigned int port, struct orphan_
 	return OK;
 }
 
-static int sipc_packet_handler_daemon(struct _packet *packet, unsigned int port, struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports)
+static int sipc_packet_handler_daemon(struct _packet *packet, struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports)
 {
 	int ret = OK;
 	unsigned int lport = 0;
+	unsigned int port = 0;
 	char *ptr = NULL;
 
 	if (!packet) {
 		errorf("args cannot be NULL\n");
 		goto fail;
 	}
+	port = packet->port;
 	
 	debugf("incoming packet type '%s'\n", packet_type_beautiy((enum _packet_type)packet->packet_type));
 
@@ -653,8 +659,13 @@ static int sipc_read_data_daemon(int sockfd, struct title_list *title_list, stru
 	int ret = OK;
 	int byte_write;
 	struct _packet packet;
-	unsigned int old_port = 0;
 	unsigned int next_port = 0;
+	char buffer[BUFFER_SIZE] = {0};
+	struct json_object *object = NULL;
+	struct json_object *type = NULL;
+	struct json_object *port = NULL;
+	struct json_object *title = NULL;
+	struct json_object *payload = NULL;
 
 	if (!title_list || !orphan_list || !available_ports || sockfd < 0) {
 		errorf("args cannot be NULL\n");
@@ -662,75 +673,70 @@ static int sipc_read_data_daemon(int sockfd, struct title_list *title_list, stru
 	}
 
 	memset(&packet, 0, sizeof(struct _packet));
+	memset(buffer, 0, sizeof(buffer));
 
 	errno = 0;
-	if (recv(sockfd, &packet.packet_type, sizeof(packet.packet_type), 0) < 0) {
+	if (recv(sockfd, buffer, sizeof(buffer), 0) < 0) {
 		errorf("recv error from socket %d, errno: %d\n", sockfd, errno);
 		goto fail;
 	}
+	debugf("buffer: %s\n", buffer);
 
-	errno = 0;
-	if (recv(sockfd, &packet.title_size, sizeof(packet.title_size), 0) < 0) {
-		errorf("recv error from socket %d, errno: %d\n", sockfd, errno);
+	object = json_tokener_parse(buffer);
+	if (object == NULL) {
+		errorf("json_tokener_parse failed\n");
 		goto fail;
 	}
-
-	if (!packet.title_size) {
-		errorf("packet title size should be greater than zero\n");
-		goto out;
+	type = json_object_object_get(object, JSON_STR_TYPE);
+	if (type == NULL || !json_object_is_type(type, json_type_int)) {
+		errorf("cannot get %s field\n", JSON_STR_TYPE);
+		goto fail;
 	}
-	packet.title = (char *)calloc(packet.title_size, sizeof(char));
+	packet.packet_type = (enum _packet_type)json_object_get_int(type);
+
+	port = json_object_object_get(object, JSON_STR_PORT);
+	if (port == NULL || !json_object_is_type(port, json_type_int)) {
+		errorf("cannot get %s field\n", JSON_STR_PORT);
+		goto fail;
+	}
+	packet.port = json_object_get_int(port);
+
+	title = json_object_object_get(object, JSON_STR_TITLE);
+	if (title == NULL || !json_object_is_type(title, json_type_string)) {
+		errorf("cannot get %s field\n", JSON_STR_TITLE);
+		goto fail;
+	}
+	packet.title = strdup(json_object_get_string(title));
 	if (!packet.title) {
-		errorf("calloc failed\n");
-		goto fail;
-	}
-	errno = 0;
-	if (recv(sockfd, packet.title, packet.title_size, 0) < 0) {
-		errorf("recv error from socket %d, errno: %d\n", sockfd, errno);
+		errorf("strdup failed\n");
 		goto fail;
 	}
 
-	errno = 0;
-	if (recv(sockfd, &packet.payload_size, sizeof(packet.payload_size), 0) < 0) {
-		errorf("recv error from socket %d, errno: %d\n", sockfd, errno);
+	payload = json_object_object_get(object, JSON_STR_PAYLOAD);
+	if (payload == NULL || !json_object_is_type(payload, json_type_string)) {
+		errorf("cannot get %s field\n", JSON_STR_PAYLOAD);
 		goto fail;
 	}
-
-	if (!packet.payload_size) {
-		goto proceed;
-	}
-
-	packet.payload = (char *)calloc(packet.payload_size + 1, sizeof(char));
+	packet.payload = strdup(json_object_get_string(payload));
 	if (!packet.payload) {
-		errorf("calloc failed\n");
-		goto fail;
-	}
-	errno = 0;
-	if (recv(sockfd, packet.payload, packet.payload_size, 0) < 0) {
-		errorf("recv error from socket %d, errno: %d\n", sockfd, errno);
+		errorf("strdup failed\n");
 		goto fail;
 	}
 
-proceed:
-	errno = 0;
-	if (recv(sockfd, &old_port, sizeof(old_port), 0) < 0) {
-		errorf("recv error from socket %d, errno: %d\n", sockfd, errno);
-		goto fail;
-	}
-
-	if (!old_port && packet.packet_type == REGISTER) {
+	if (!packet.port && packet.packet_type == REGISTER) {
 		next_port = next_available_port(available_ports);
 		byte_write = send(sockfd, &next_port, sizeof(next_port), MSG_NOSIGNAL);
 		if (byte_write != sizeof(next_port)) {
 			errorf("Write error to socket %d.\n", sockfd);
 			goto fail;
 		}
-		old_port = next_port;
+
+		packet.port = next_port;
 
 		sleep(5); //give time to caller to create server thread
 	}
 
-	if (sipc_packet_handler_daemon(&packet, old_port, title_list, orphan_list, available_ports) == NOK) {
+	if (sipc_packet_handler_daemon(&packet, title_list, orphan_list, available_ports) == NOK) {
 		errorf("sipc_packet_handler() failed\n");
 		goto fail;
 	}
@@ -743,6 +749,7 @@ fail:
 out:
 	FREE(packet.title);
 	FREE(packet.payload);
+	json_object_put(object);
 
 	return ret;
 }
@@ -856,8 +863,8 @@ static int sipc_create_server_daemon(struct title_list *title_list, struct orpha
 
 			for (i = 0; i <= max_fd; i++) {
 				if (FD_ISSET(i, &backup_set) && i != listen_fd) {
-						close(i);
-						FD_CLR(i, &backup_set);
+					close(i);
+					FD_CLR(i, &backup_set);
 				}
 			}
 			max_fd = listen_fd;

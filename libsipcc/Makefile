@@ -4,6 +4,10 @@ C_SRCS = \
 sipc_lib.c \
 ../common/sipc_common.o
 
+CFLAGS += -I$(JSON_C_DIR)/include/json-c
+CFLAGS += -I$(JSON_C_DIR)/include
+LDFLAGS+= -L$(JSON_C_DIR)/lib -ljson-c
+
 LIBSIPCC_INCDIR=-I ./include -I ../common/include
 
 OBJS += \

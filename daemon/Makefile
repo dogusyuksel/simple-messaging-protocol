@@ -2,6 +2,10 @@ EXECUTABLE_NAME=sipcd
 
 CFLAGS += -Wno-stringop-truncation
 
+CFLAGS += -I$(JSON_C_DIR)/include/json-c
+CFLAGS += -I$(JSON_C_DIR)/include
+LDFLAGS+= -L$(JSON_C_DIR)/lib -ljson-c
+
 C_SRCS = \
 daemon.c \
 ../common/sipc_common.o

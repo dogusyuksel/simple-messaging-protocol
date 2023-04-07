@@ -19,6 +19,8 @@
 #include <netinet/in.h>
 #include <sys/un.h>
 
+#include "json-c/json.h"
+
 #define UNUSED(__val__)		((void)__val__)
 
 #define OK			0
@@ -46,10 +48,16 @@
 #define ANSI_COLOR_CYAN		"\x1b[36m"
 #define ANSI_COLOR_RESET	"\x1b[0m"
 
+#define JSON_STR_TYPE		"type"
+#define JSON_STR_PORT		"port"
+#define JSON_STR_TITLE		"title"
+#define JSON_STR_PAYLOAD	"payload"
+#define JSON_STR_EMPTY		"NULL"
+
 #ifdef OPEN_DEBUG
 #define debugf(...)		fprintf(stderr, "[%d]\t", __LINE__);fprintf(stdout, __VA_ARGS__)
 #else
-#define debugf(...)		
+#define debugf(...)
 #endif
 #define errorf(...)		fprintf(stderr, ANSI_COLOR_RED"[%d]\t", __LINE__);fprintf(stderr, __VA_ARGS__);fprintf(stderr, ANSI_COLOR_RESET)
 
@@ -81,11 +89,9 @@ enum _packet_type
 
 struct _packet
 {
-	unsigned char packet_type;
-	unsigned int title_size;
+	enum _packet_type packet_type;
 	unsigned int port;
 	char *title;
-	unsigned int payload_size;
 	char *payload;
 };
 
