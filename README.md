@@ -1,7 +1,7 @@
 <p align="center"> 
   <img src="pictures/simple_ipc.png" width="600px" height="320px">
 </p>
-<h1 align="center"> Simple IPC </h1>
+<h1 align="center"> Simple Messaging Protocol </h1>
 <h3 align="center"> The Easiest Way to Communicate with Other Applications </h3>  
 
 </br>
