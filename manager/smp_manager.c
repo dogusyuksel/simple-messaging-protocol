@@ -1,6 +1,6 @@
-#include "sipc_common.h"
+#include "smp_common.h"
 
-#define VERSION		"00.04"
+#define VERSION		"01.00"
 
 struct port_list_entry {
 	unsigned int port;
@@ -36,19 +36,21 @@ static struct option parameters[] = {
 	{ NULL,					0,					0, 	0 	},
 };
 
-static void print_help_exit (char *arg)
+static void print_help_exit(char *arg)
 {
 	if (!arg) {
 		return;
 	}
+
 	printf("\n%s help:\n\n", arg);
 
-	printf("--version:\t('v')\n\t\treturns version\n\n");
+	printf("\t--version:\t('v')\n\t\treturns version\n\n");
 
 	exit(OK);
 }
 
-static struct orphan_list_entry *find_entry_in_orphan_list(char *title, struct orphan_list *orphan_list)
+static struct orphan_list_entry *smp_manager_find_entry_in_orphan_list
+	(char *title, struct orphan_list *orphan_list)
 {
 	struct orphan_list_entry *entry = NULL;
 
@@ -66,7 +68,8 @@ static struct orphan_list_entry *find_entry_in_orphan_list(char *title, struct o
 	return NULL;
 }
 
-static struct title_list_entry *find_entry_in_title_list(char *title, struct title_list *title_list)
+static struct title_list_entry *smp_manager_find_entry_in_title_list
+	(char *title, struct title_list *title_list)
 {
 	struct title_list_entry *entry = NULL;
 
@@ -84,11 +87,13 @@ static struct title_list_entry *find_entry_in_title_list(char *title, struct tit
 	return NULL;
 }
 
-static bool is_port_int_the_list(unsigned int port, struct port_list *port_list)
+static bool smp_manager_is_port_int_the_list(unsigned int port,
+	struct port_list *port_list)
 {
 	struct port_list_entry *entry = NULL;
 
-	if (!port_list || port < STARTING_PORT || port > STARTING_PORT + BACKLOG) {
+	if (!port_list || port < STARTING_PORT ||
+		port > STARTING_PORT + BACKLOG) {
 		errorf("args cannot be NULL\n");
 		return false;
 	}
@@ -102,16 +107,19 @@ static bool is_port_int_the_list(unsigned int port, struct port_list *port_list)
 	return false;
 }
 
-static int add_new_entry_to_the_port_list(unsigned int port, struct port_list *port_list)
+static int smp_manager_add_new_entry_to_the_port_list(unsigned int port,
+	struct port_list *port_list)
 {
 	struct port_list_entry *entry = NULL;
 
-	if (!port_list || port < STARTING_PORT || port > STARTING_PORT + BACKLOG) {
+	if (!port_list || port < STARTING_PORT ||
+		port > STARTING_PORT + BACKLOG) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	entry = (struct port_list_entry *)calloc(1, sizeof(struct port_list_entry));
+	entry = (struct port_list_entry *)
+		calloc(1, sizeof(struct port_list_entry));
 	if (!entry) {
 		errorf("data is null\n");
 		return NOK;
@@ -124,16 +132,19 @@ static int add_new_entry_to_the_port_list(unsigned int port, struct port_list *p
 	return OK;
 }
 
-static int add_new_entry_to_title_list(char *title, unsigned int port, struct title_list *title_list)
+static int smp_manager_add_new_entry_to_title_list(char *title,
+	unsigned int port, struct title_list *title_list)
 {
 	struct title_list_entry *entry = NULL;
 
-	if (!title || port < STARTING_PORT || port > STARTING_PORT + BACKLOG || !title_list) {
+	if (!title || port < STARTING_PORT ||
+		port > STARTING_PORT + BACKLOG || !title_list) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	entry = (struct title_list_entry *)calloc(1, sizeof(struct title_list_entry));
+	entry = (struct title_list_entry *)
+		calloc(1, sizeof(struct title_list_entry));
 	if (!entry) {
 		errorf("data is null\n");
 		return NOK;
@@ -149,8 +160,9 @@ static int add_new_entry_to_title_list(char *title, unsigned int port, struct ti
 	strncpy(entry->title, title, strlen(title));
 	TAILQ_INIT(&(entry->port_list));
 
-	if (add_new_entry_to_the_port_list(port, &(entry->port_list)) == NOK) {
-		errorf("add_new_entry_to_the_port_list() failed\n");
+	if (smp_manager_add_new_entry_to_the_port_list(port,
+		&(entry->port_list)) == NOK) {
+		errorf("smp_manager_add_new_entry_to_the_port_list() failed\n");
 		FREE(entry->title);
 		FREE(entry);
 		return NOK;
@@ -161,23 +173,29 @@ static int add_new_entry_to_title_list(char *title, unsigned int port, struct ti
 	return OK;
 }
 
-static int add_port_title_couple(char *title, unsigned int port, struct title_list *title_list)
+static int smp_manager_add_port_title_couple(char *title,
+	unsigned int port, struct title_list *title_list)
 {
 	struct title_list_entry *entry = NULL;
 
-	if (!title || port < STARTING_PORT || port > STARTING_PORT + BACKLOG || !title_list) {
+	if (!title || port < STARTING_PORT ||
+		port > STARTING_PORT + BACKLOG || !title_list) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	if ((entry = find_entry_in_title_list(title, title_list)) == NULL) {
+	if ((entry = smp_manager_find_entry_in_title_list(title,
+		title_list)) == NULL) {
 		debugf("add new entry to the title list\n");
-		return add_new_entry_to_title_list(title, port, title_list);
+		return smp_manager_add_new_entry_to_title_list(title,
+			port, title_list);
 	}
 
-	if (is_port_int_the_list(port, &(entry->port_list)) == false) {
-		if (add_new_entry_to_the_port_list(port, &(entry->port_list)) == NOK) {
-			errorf("add_new_entry_to_the_port_list() failed\n");
+	if (smp_manager_is_port_int_the_list(port,
+		&(entry->port_list)) == false) {
+		if (smp_manager_add_new_entry_to_the_port_list(port,
+			&(entry->port_list)) == NOK) {
+			errorf("smp_manager_add_new_entry_to_the_port_list() failed\n");
 			return NOK;
 		}
 		debugf("port %d is registered for the title '%s'\n", port, title);
@@ -188,10 +206,10 @@ static int add_port_title_couple(char *title, unsigned int port, struct title_li
 	return OK;
 }
 
-static void port_data_structure_destroy(struct port_list *port_list)
+static void smp_manager_port_data_structure_destroy
+	(struct port_list *port_list)
 {
-	struct port_list_entry *entry1 = NULL;
-	struct port_list_entry *entry2 = NULL;
+	struct port_list_entry *entry1 = NULL, *entry2 = NULL;
 
 	if (!port_list) {
 		errorf("args cannot be NULL\n");
@@ -212,17 +230,20 @@ static void port_data_structure_destroy(struct port_list *port_list)
 	TAILQ_INIT(port_list); 
 }
 
-static int remove_port_from_orphan(char *title, unsigned int port, struct orphan_list *orphan_list)
+static int smp_manager_remove_port_from_orphan(char *title,
+	unsigned int port, struct orphan_list *orphan_list)
 {
 	struct orphan_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
 
-	if (!title || port < STARTING_PORT || port > STARTING_PORT + BACKLOG || !orphan_list) {
+	if (!title || port < STARTING_PORT ||
+		port > STARTING_PORT + BACKLOG || !orphan_list) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	if ((entry = find_entry_in_orphan_list(title, orphan_list)) == NULL) {
+	if ((entry = smp_manager_find_entry_in_orphan_list(title,
+		orphan_list)) == NULL) {
 		return OK;
 	}
 
@@ -238,24 +259,28 @@ static int remove_port_from_orphan(char *title, unsigned int port, struct orphan
 		}
 	}
 
-	if (entry && (&(entry->port_list)) && TAILQ_EMPTY(&(entry->port_list))) {
+	if (entry && (&(entry->port_list)) &&
+		TAILQ_EMPTY(&(entry->port_list))) {
 		TAILQ_INIT(&(entry->port_list));
 	}
 
 	return OK;
 }
 
-static int remove_port_from_title(char *title, unsigned int port, struct title_list *title_list)
+static int smp_manager_remove_port_from_title(char *title,
+	unsigned int port, struct title_list *title_list)
 {
 	struct title_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
 
-	if (!title || port < STARTING_PORT || port > STARTING_PORT + BACKLOG || !title_list) {
+	if (!title || port < STARTING_PORT ||
+		port > STARTING_PORT + BACKLOG || !title_list) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
 
-	if ((entry = find_entry_in_title_list(title, title_list)) == NULL) {
+	if ((entry = smp_manager_find_entry_in_title_list(title,
+		title_list)) == NULL) {
 		return OK;
 	}
 
@@ -271,19 +296,22 @@ static int remove_port_from_title(char *title, unsigned int port, struct title_l
 		}
 	}
 
-	if (entry && (&(entry->port_list)) && TAILQ_EMPTY(&(entry->port_list))) {
+	if (entry && (&(entry->port_list)) &&
+		TAILQ_EMPTY(&(entry->port_list))) {
 		TAILQ_INIT(&(entry->port_list));
 	}
 
 	return OK;
 }
 
-static int remove_port_from_all_title(unsigned int port, struct title_list *title_list)
+static int smp_manager_remove_port_from_all_title(unsigned int port,
+	struct title_list *title_list)
 {
 	struct title_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
 
-	if (port < STARTING_PORT || port > STARTING_PORT + BACKLOG || !title_list) {
+	if (port < STARTING_PORT || port > STARTING_PORT + BACKLOG ||
+		!title_list) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
@@ -293,20 +321,23 @@ static int remove_port_from_all_title(unsigned int port, struct title_list *titl
 	}
 
 	TAILQ_FOREACH(entry, title_list, entries) {
-		if (!entry || !(&(entry->port_list)) || TAILQ_EMPTY(&(entry->port_list))) {
+		if (!entry || !(&(entry->port_list)) ||
+			TAILQ_EMPTY(&(entry->port_list))) {
 			break;
 		}
 		TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
 			if (!pentry) {
 				continue;
 			}
+
 			if (port == pentry->port) {
 				TAILQ_REMOVE(&(entry->port_list), pentry, entries);
 				FREE(pentry);
 				break;
 			}
 		}
-		if (entry && (&(entry->port_list)) && TAILQ_EMPTY(&(entry->port_list))) {
+		if (entry && (&(entry->port_list)) &&
+			TAILQ_EMPTY(&(entry->port_list))) {
 			TAILQ_INIT(&(entry->port_list));
 		}
 	}
@@ -314,9 +345,8 @@ static int remove_port_from_all_title(unsigned int port, struct title_list *titl
 	return OK;
 }
 
-static int sipc_send_packet_daemon(struct _packet *packet, int fd)
+static int smp_manager_send_packet_daemon(struct _packet *packet, int fd)
 {
-
 	char buffer[BUFFER_SIZE] = {0};
 	json_object *message = NULL;
 
@@ -329,24 +359,31 @@ static int sipc_send_packet_daemon(struct _packet *packet, int fd)
 	if (message == NULL) {
 		return NOK;
 	}
-	json_object_object_add(message, JSON_STR_TYPE, json_object_new_int((unsigned int)packet->packet_type));
-	json_object_object_add(message, JSON_STR_PORT, json_object_new_int(packet->port));
+	json_object_object_add(message, JSON_STR_TYPE,
+		json_object_new_int((unsigned int)packet->packet_type));
+	json_object_object_add(message, JSON_STR_PORT,
+		json_object_new_int(packet->port));
 	if (packet->title) {
-		json_object_object_add(message, JSON_STR_TITLE, json_object_new_string(packet->title));
+		json_object_object_add(message, JSON_STR_TITLE,
+			json_object_new_string(packet->title));
 	} else {
-		json_object_object_add(message, JSON_STR_TITLE, json_object_new_string(JSON_STR_EMPTY));
+		json_object_object_add(message, JSON_STR_TITLE,
+			json_object_new_string(JSON_STR_EMPTY));
 	}
 	if (packet->payload) {
-		json_object_object_add(message, JSON_STR_PAYLOAD, json_object_new_string(packet->payload));
+		json_object_object_add(message, JSON_STR_PAYLOAD,
+			json_object_new_string(packet->payload));
 	} else {
-		json_object_object_add(message, JSON_STR_PAYLOAD, json_object_new_string(JSON_STR_EMPTY));
+		json_object_object_add(message, JSON_STR_PAYLOAD,
+			json_object_new_string(JSON_STR_EMPTY));
 	}
 
 	strncpy(buffer, json_object_to_json_string(message), sizeof(buffer));
 	debugf("%s\n", buffer);
 
 	errno = 0;
-	if (send(fd, buffer, strlen(buffer), MSG_NOSIGNAL) == -1) {
+	if (packet->title &&
+		send(fd, buffer, strlen(buffer), MSG_NOSIGNAL) == -1) {
 		errorf("send() failed with %d: %s\n", errno, strerror(errno));
 		return NOK;
 	}
@@ -356,10 +393,12 @@ static int sipc_send_packet_daemon(struct _packet *packet, int fd)
 	return OK;
 }
 
-static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *data, unsigned int len, unsigned int _port)
+static int smp_manager_send_daemon(char *title, enum _packet_type packet_type,
+	void *data, unsigned int port)
 {
 	int ret = OK;
 	int fd = 0;
+	unsigned int len = 0;
 	struct sockaddr_storage address;
 	struct _packet packet;
 
@@ -374,18 +413,18 @@ static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *da
 	memset((void *)&address, 0, sizeof(struct sockaddr_in6));
 	memset(&packet, 0, sizeof(struct _packet));
 
-	if (sipc_buf_to_sockstorage(IPV6_LOOPBACK_ADDR, _port, &address) == NOK) {
-		errorf("sipc_buf_to_sockstorage() failed\n");
+	if (smp_common_buf_to_sockstorage(IPV6_LOOPBACK_ADDR, port, &address) == NOK) {
+		errorf("smp_common_buf_to_sockstorage() failed\n");
 		return NOK;
 	}
 
-	fd = sipc_socket_open_use_buf(IPV6_LOOPBACK_ADDR, SOCK_STREAM, 0);
+	fd = smp_common_socket_open_use_buf();
 	if (fd == -1) {
 		errorf("socket() failed with %d: %s\n", errno, strerror(errno));
 		return NOK;
 	}
 
-	if (sipc_connect_socket(fd, (struct sockaddr*)&address) < 0) {
+	if (smp_common_connect_socket(fd, (struct sockaddr*)&address) < 0) {
 		errorf("connect() failed with %d: %s\n", errno, strerror(errno));
 		goto fail;
 	}
@@ -397,7 +436,7 @@ static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *da
 	}
 	packet.packet_type = (unsigned char)packet_type;
 
-	if (data && len) {
+	if (data && (len = strlen(data))) {
 		packet.payload = (void *)calloc(1, len + 1);
 		if (!packet.payload) {
 			errorf("calloc failed\n");
@@ -405,11 +444,12 @@ static int sipc_send_daemon(char *title, enum _packet_type packet_type, void *da
 		}
 		strncpy(packet.payload, data, len);
 
-		debugf("send data '%s' to port '%d'\n", packet.payload, _port);
+		debugf("send data '%s' to port '%d'\n", packet.payload, port);
 	}
 
-	if (sipc_send_packet_daemon(&packet, fd) == NOK) {
-		errorf("sipc_send_packet_daemon() failed with %d: %s\n", errno, strerror(errno));
+	if (smp_manager_send_packet_daemon(&packet, fd) == NOK) {
+		errorf("smp_manager_send_packet_daemon() failed with %d: %s\n",
+			errno, strerror(errno));
 		goto fail;
 	}
 
@@ -428,7 +468,8 @@ out:
 	return ret;
 }
 
-static int send_data_to_all_title(char *title, char *data, struct title_list *title_list)
+static int smp_manager_send_data_to_all_title(char *title, char *data,
+	struct title_list *title_list)
 {
 	struct title_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
@@ -438,20 +479,23 @@ static int send_data_to_all_title(char *title, char *data, struct title_list *ti
 		return NOK;
 	}
 
-	if ((entry = find_entry_in_title_list(title, title_list)) == NULL) {
+	if ((entry = smp_manager_find_entry_in_title_list(title,
+		title_list)) == NULL) {
 		return NOK;
 	}
 
 	TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
-		if (sipc_send_daemon(title, SENDATA, (void *)data, strlen(data), pentry->port) == NOK) {
-			errorf("sipc_send() failed\n");
+		if (smp_manager_send_daemon(title, SENDATA,
+			(void *)data, pentry->port) == NOK) {
+			errorf("smp_send() failed\n");
 		}
 	}
 
 	return OK;
 }
 
-static int add_data_to_orphan_list(char *title, char *data, struct orphan_list *orphan_list)
+static int smp_manager_add_data_to_orphan_list(char *title,
+	char *data, struct orphan_list *orphan_list)
 {
 	int ret = OK;
 	struct orphan_list_entry *entry = NULL;
@@ -461,7 +505,8 @@ static int add_data_to_orphan_list(char *title, char *data, struct orphan_list *
 		return NOK;
 	}
 
-	entry = (struct orphan_list_entry *)calloc(1, sizeof(struct orphan_list_entry));
+	entry = (struct orphan_list_entry *)
+		calloc(1, sizeof(struct orphan_list_entry));
 	if (!entry) {
 		errorf("data is null\n");
 		return NOK;
@@ -496,7 +541,8 @@ success:
 	return ret;
 }
 
-static int send_orphan_data_first(char *title, unsigned int port, struct orphan_list *orphan_list)
+static int smp_manager_send_orphan_data_first(char *title, unsigned int port,
+	struct orphan_list *orphan_list)
 {
 #ifdef OPEN_DEBUG
 	unsigned int i = 0;
@@ -505,7 +551,8 @@ static int send_orphan_data_first(char *title, unsigned int port, struct orphan_
 	struct orphan_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
 
-	if (!title || port < STARTING_PORT || port > STARTING_PORT + BACKLOG || !orphan_list) {
+	if (!title || port < STARTING_PORT ||
+		port > STARTING_PORT + BACKLOG || !orphan_list) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
@@ -521,13 +568,15 @@ static int send_orphan_data_first(char *title, unsigned int port, struct orphan_
 					debugf("port %d is '%d'\n", i++, pentry->port);
 				}
 				if (should_send) {
-					if (sipc_send_daemon(title, SENDATA, (void *)entry->data, strlen(entry->data), port) == NOK) {
-						errorf("sipc_send() failed\n");
+					if (smp_manager_send_daemon(title, SENDATA, (void *)entry->data, port) == NOK) {
+						errorf("smp_send() failed\n");
 						return NOK;
 					}
-					debugf("orphan data '%s' send for the title '%s' to the port '%d'\n", entry->data, entry->title, port);
-					if (add_new_entry_to_the_port_list(port, &(entry->port_list)) == NOK) {
-						errorf("add_new_entry_to_the_port_list() failed\n");
+					debugf("orphan data '%s' send for the title '%s' to the port '%d'\n",
+						entry->data, entry->title, port);
+					if (smp_manager_add_new_entry_to_the_port_list(port,
+						&(entry->port_list)) == NOK) {
+						errorf("smp_manager_add_new_entry_to_the_port_list() failed\n");
 						return NOK;
 					}
 				}
@@ -538,7 +587,9 @@ static int send_orphan_data_first(char *title, unsigned int port, struct orphan_
 	return OK;
 }
 
-static int sipc_packet_handler_daemon(struct _packet *packet, struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports)
+static int smp_manager_packet_handler_daemon(struct _packet *packet,
+	struct title_list *title_list, struct orphan_list *orphan_list,
+	bool *available_ports)
 {
 	int ret = OK;
 	unsigned int lport = 0;
@@ -551,18 +602,19 @@ static int sipc_packet_handler_daemon(struct _packet *packet, struct title_list 
 	}
 	port = packet->port;
 	
-	debugf("incoming packet type '%s'\n", packet_type_beautiy((enum _packet_type)packet->packet_type));
+	debugf("incoming packet type '%s'\n",
+		smp_common_packet_type_beauty((enum _packet_type)packet->packet_type));
 
 	switch (packet->packet_type) {
 		case REGISTER:
 			debugf("try to add '%d' port for the title '%s'\n", port, packet->title);
-			if (add_port_title_couple(packet->title, port, title_list) == NOK) {
-				errorf("add_port_title_couple() failed\n");
+			if (smp_manager_add_port_title_couple(packet->title, port, title_list) == NOK) {
+				errorf("smp_manager_add_port_title_couple() failed\n");
 				goto fail;
 			}
 			debugf("title '%s' newly added, send orphan data first\n",  packet->title);
-			if (send_orphan_data_first(packet->title, port, orphan_list) == NOK) {
-				errorf("send_orphan_data_first() failed\n");
+			if (smp_manager_send_orphan_data_first(packet->title, port, orphan_list) == NOK) {
+				errorf("smp_manager_send_orphan_data_first() failed\n");
 				goto fail;
 			}
 			available_ports[port - STARTING_PORT] = true;
@@ -581,14 +633,14 @@ static int sipc_packet_handler_daemon(struct _packet *packet, struct title_list 
 				break;
 			}
 
-			if (remove_port_from_title(packet->title, lport, title_list) == NOK) {
-				errorf("remove_port_from_title() failed\n");
+			if (smp_manager_remove_port_from_title(packet->title, lport, title_list) == NOK) {
+				errorf("smp_manager_remove_port_from_title() failed\n");
 				goto fail;
 			}
 			available_ports[lport - STARTING_PORT] = false;
 
-			if (remove_port_from_orphan(packet->title, lport, orphan_list) == NOK) {
-				errorf("remove_port_from_orphan() failed\n");
+			if (smp_manager_remove_port_from_orphan(packet->title, lport, orphan_list) == NOK) {
+				errorf("smp_manager_remove_port_from_orphan() failed\n");
 				goto fail;
 			}
 			break;
@@ -606,17 +658,17 @@ static int sipc_packet_handler_daemon(struct _packet *packet, struct title_list 
 				break;
 			}
 
-			if (remove_port_from_all_title(lport, title_list) == NOK) {
-				errorf("remove_port_from_all_title() failed\n");
+			if (smp_manager_remove_port_from_all_title(lport, title_list) == NOK) {
+				errorf("smp_manager_remove_port_from_all_title() failed\n");
 				goto fail;
 			}
 			available_ports[lport - STARTING_PORT] = false;
 			break;
 		case SENDATA:
 			debugf("send data '%s' to title '%s'\n",  packet->payload, packet->title);
-			if (send_data_to_all_title(packet->title, packet->payload, title_list) == NOK) {
-				debugf("send_data_to_all_title() failed\n");
-				if (add_data_to_orphan_list(packet->title, packet->payload, orphan_list) == NOK) {
+			if (smp_manager_send_data_to_all_title(packet->title, packet->payload, title_list) == NOK) {
+				debugf("smp_manager_send_data_to_all_title() failed\n");
+				if (smp_manager_add_data_to_orphan_list(packet->title, packet->payload, orphan_list) == NOK) {
 					errorf("add_data_to_orphan() failed\n");
 					goto fail;
 				} else {
@@ -637,7 +689,7 @@ out:
 	return ret;
 }
 
-static unsigned int next_available_port(bool *available_ports)
+static unsigned int smp_manager_next_available_port(bool *available_ports)
 {
 	unsigned int i = 0;
 
@@ -654,13 +706,14 @@ static unsigned int next_available_port(bool *available_ports)
 	return 0;
 }
 
-static int sipc_read_data_daemon(int sockfd, struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports)
+static int smp_manager_read_data_daemon(int sockfd, struct title_list *title_list,
+	struct orphan_list *orphan_list, bool *available_ports)
 {
 	int ret = OK;
 	int byte_write;
-	struct _packet packet;
 	unsigned int next_port = 0;
 	char buffer[BUFFER_SIZE] = {0};
+	struct _packet packet;
 	struct json_object *object = NULL;
 	struct json_object *type = NULL;
 	struct json_object *port = NULL;
@@ -724,7 +777,7 @@ static int sipc_read_data_daemon(int sockfd, struct title_list *title_list, stru
 	}
 
 	if (!packet.port && packet.packet_type == REGISTER) {
-		next_port = next_available_port(available_ports);
+		next_port = smp_manager_next_available_port(available_ports);
 		byte_write = send(sockfd, &next_port, sizeof(next_port), MSG_NOSIGNAL);
 		if (byte_write != sizeof(next_port)) {
 			errorf("Write error to socket %d.\n", sockfd);
@@ -736,8 +789,9 @@ static int sipc_read_data_daemon(int sockfd, struct title_list *title_list, stru
 		sleep(5); //give time to caller to create server thread
 	}
 
-	if (sipc_packet_handler_daemon(&packet, title_list, orphan_list, available_ports) == NOK) {
-		errorf("sipc_packet_handler() failed\n");
+	if (smp_manager_packet_handler_daemon(&packet, title_list,
+		orphan_list, available_ports) == NOK) {
+		errorf("smp_manager_packet_handler_daemon() failed\n");
 		goto fail;
 	}
 
@@ -754,7 +808,7 @@ out:
 	return ret;
 }
 
-static void dump_title_list(struct title_list *title_list)
+static void smp_manager_dump_title_list(struct title_list *title_list)
 {
 	struct title_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
@@ -769,6 +823,7 @@ static void dump_title_list(struct title_list *title_list)
 		if (entry && entry->title) {
 			debugf("\tdump title: %s\n", entry->title);
 		}
+
 		TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
 			if (pentry) {
 				debugf("\t\tdump port: %d\n", pentry->port);
@@ -777,7 +832,7 @@ static void dump_title_list(struct title_list *title_list)
 	}
 }
 
-static void dump_orphan_list(struct orphan_list *orphan_list)
+static void smp_manager_dump_orphan_list(struct orphan_list *orphan_list)
 {
 	struct orphan_list_entry *entry = NULL;
 	struct port_list_entry *pentry = NULL;
@@ -792,9 +847,11 @@ static void dump_orphan_list(struct orphan_list *orphan_list)
 		if (entry && entry->title) {
 			debugf("\tdump title: %s\n", entry->title);
 		}
+
 		if (entry && entry->data) {
 			debugf("\tdump data: %s\n", entry->data);
 		}
+
 		TAILQ_FOREACH(pentry, &(entry->port_list), entries) {
 			if (pentry) {
 				debugf("\t\tdump port: %d\n", pentry->port);
@@ -803,27 +860,29 @@ static void dump_orphan_list(struct orphan_list *orphan_list)
 	}
 }
 
-static int sipc_create_server_daemon(struct title_list *title_list, struct orphan_list *orphan_list, bool *available_ports)
+static int smp_manager_create_server_daemon(struct title_list *title_list,
+	struct orphan_list *orphan_list, bool *available_ports)
 {
 	int ret = OK;
 	int enable = 1;
 	int listen_fd, conn_fd, max_fd = 1, ret_val, i;
 	struct sockaddr_storage client_addr, server_addr;
+	struct timeval tv;
 	char c_ip_addr[INET6_ADDRSTRLEN] = {0};
 	fd_set backup_set, client_set;
-	struct timeval tv;
 
 	memset(c_ip_addr, 0, sizeof(c_ip_addr));
 	memset(&server_addr, 0, sizeof(server_addr));
 	memset(&client_addr, 0, sizeof(client_addr));
 
-	if (sipc_fill_wildcard_sockstorage(PORT, AF_UNSPEC, &server_addr) != 0) {
-		errorf("sipc_fill_wildcard_sockstorage() failed\n");
+	if (smp_common_fill_wildcard_sockstorage(PORT, &server_addr) != 0) {
+		errorf("smp_common_fill_wildcard_sockstorage() failed\n");
 		goto fail;
 	}
 
-	if ((listen_fd = sipc_socket_open_use_sockaddr((struct sockaddr *)&server_addr, SOCK_STREAM, 0)) == -1) {
-		errorf("sipc_socket_open_use_sockaddr() failed\n");
+	if ((listen_fd =
+		smp_common_socket_open_use_sockaddr((struct sockaddr *)&server_addr)) == -1) {
+		errorf("smp_common_socket_open_use_sockaddr() failed\n");
 		goto fail;
 	}
 
@@ -832,13 +891,13 @@ static int sipc_create_server_daemon(struct title_list *title_list, struct orpha
 		goto fail;
 	}
 
-	if (sipc_bind_socket(listen_fd, (struct sockaddr *)&server_addr) == -1) {
-		errorf("sipc_bind_socket() failed\n");
+	if (smp_common_bind_socket(listen_fd, (struct sockaddr *)&server_addr) == -1) {
+		errorf("smp_common_bind_socket() failed\n");
 		goto fail;
 	}
 
-	if (sipc_socket_listen(listen_fd, BACKLOG) == -1) {
-		errorf("sipc_socket_listen() failed\n");
+	if (smp_common_socket_listen(listen_fd) == -1) {
+		errorf("smp_common_socket_listen() failed\n");
 		goto fail;
 	}
 
@@ -858,8 +917,8 @@ static int sipc_create_server_daemon(struct title_list *title_list, struct orpha
 			continue;
 		} else if (ret_val == 0) {
 			//dump title and orphan list
-			dump_title_list(title_list);
-			dump_orphan_list(orphan_list);
+			smp_manager_dump_title_list(title_list);
+			smp_manager_dump_orphan_list(orphan_list);
 
 			for (i = 0; i <= max_fd; i++) {
 				if (FD_ISSET(i, &backup_set) && i != listen_fd) {
@@ -872,7 +931,7 @@ static int sipc_create_server_daemon(struct title_list *title_list, struct orpha
 		}
 
 		if (FD_ISSET(listen_fd, &client_set)) {
-			conn_fd = sipc_socket_accept(listen_fd, &client_addr);
+			conn_fd = smp_common_socket_accept(listen_fd, &client_addr);
 			if (conn_fd < 0) {
 				if (errno == EINTR) {
 					debugf("CRS interrupted, try to accept again\n");
@@ -891,8 +950,8 @@ static int sipc_create_server_daemon(struct title_list *title_list, struct orpha
 
 		for (i = 0; i <= max_fd; i++) {
 			if (FD_ISSET(i, &client_set) && i != listen_fd) {
-				if (sipc_read_data_daemon(i, title_list, orphan_list, available_ports) == NOK) {
-					errorf("sipc_read_data_daemon() failed\n");
+				if (smp_manager_read_data_daemon(i, title_list, orphan_list, available_ports) == NOK) {
+					errorf("smp_manager_read_data_daemon() failed\n");
 					goto fail;
 				}
 				close(i);
@@ -915,10 +974,10 @@ out:
 	return ret;
 }
 
-static void title_data_structure_destroy(struct title_list *title_list)
+static void smp_manager_title_data_structure_destroy
+	(struct title_list *title_list)
 {
-	struct title_list_entry *entry1 = NULL;
-	struct title_list_entry *entry2 = NULL;
+	struct title_list_entry *entry1 = NULL, *entry2 = NULL;
 
 	if (!title_list) {
 		errorf("args cannot be NULL\n");
@@ -933,7 +992,7 @@ static void title_data_structure_destroy(struct title_list *title_list)
 	while (entry1 != NULL) {
 		entry2 = TAILQ_NEXT(entry1, entries);
 		FREE(entry1->title);
-		port_data_structure_destroy(&(entry1->port_list));
+		smp_manager_port_data_structure_destroy(&(entry1->port_list));
 		FREE(entry1);
 		entry1 = entry2;
 	}
@@ -941,10 +1000,9 @@ static void title_data_structure_destroy(struct title_list *title_list)
 	TAILQ_INIT(title_list); 
 }
 
-static void orphan_data_structure_destroy(struct orphan_list *orphan_list)
+static void smp_manager_orphan_data_structure_destroy(struct orphan_list *orphan_list)
 {
-	struct orphan_list_entry *entry1 = NULL;
-	struct orphan_list_entry *entry2 = NULL;
+	struct orphan_list_entry *entry1 = NULL, *entry2 = NULL;
 
 	if (!orphan_list) {
 		errorf("args cannot be NULL\n");
@@ -958,7 +1016,7 @@ static void orphan_data_structure_destroy(struct orphan_list *orphan_list)
 	entry1 = TAILQ_FIRST(orphan_list);
 	while (entry1 != NULL) {
 		entry2 = TAILQ_NEXT(entry1, entries);
-		port_data_structure_destroy(&(entry1->port_list));
+		smp_manager_port_data_structure_destroy(&(entry1->port_list));
 		FREE(entry1->title);
 		FREE(entry1->data);
 		FREE(entry1);
@@ -970,8 +1028,8 @@ static void orphan_data_structure_destroy(struct orphan_list *orphan_list)
 
 static void sigint_handler(__attribute__((unused)) int sig_num)
 {
-	title_data_structure_destroy(&title_list);
-	orphan_data_structure_destroy(&orphan_list);
+	smp_manager_title_data_structure_destroy(&title_list);
+	smp_manager_orphan_data_structure_destroy(&orphan_list);
 
 	exit(NOK);
 }
@@ -989,11 +1047,11 @@ int main(int argc, char **argv)
 				print_help_exit(argv[0]);
 				break;
 			case 'v':
-				debugf("%s version %s\n", argv[0], VERSION);
+				printf("%s version %s\n", argv[0], VERSION);
 				return OK;
 				break;
 			default:
-				debugf("unknown argument\n");
+				printf("type '-h' for more info\n");
 				goto fail;
 		}
 	}
@@ -1002,8 +1060,8 @@ int main(int argc, char **argv)
 	TAILQ_INIT(&orphan_list);
 	memset(available_port_map, 0, sizeof(bool) * BACKLOG);
 
-	if (sipc_create_server_daemon(&title_list, &orphan_list, available_port_map) == NOK) {
-		errorf("sipc_create_server_daemon() failed\n");
+	if (smp_manager_create_server_daemon(&title_list, &orphan_list, available_port_map) == NOK) {
+		errorf("smp_manager_create_server_daemon() failed\n");
 		goto fail;
 	}
 
@@ -1013,8 +1071,8 @@ fail:
 	ret = NOK;
 
 out:
-	title_data_structure_destroy(&title_list);
-	orphan_data_structure_destroy(&orphan_list);
+	smp_manager_title_data_structure_destroy(&title_list);
+	smp_manager_orphan_data_structure_destroy(&orphan_list);
 
 	return ret;
 }

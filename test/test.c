@@ -1,4 +1,4 @@
-#include <sipc_lib.h>
+#include <libsmp.h>
 
 int my_callback(void *prm, unsigned int len)
 {
@@ -9,7 +9,7 @@ int my_callback(void *prm, unsigned int len)
 
 static void sigint_handler(__attribute__((unused)) int sig_num)
 {
-	sipc_destroy();
+	smp_destroy();
 
 	exit(NOK);
 }
@@ -28,8 +28,8 @@ int main(int argc, char **argv)
 	signal(SIGINT, sigint_handler);
 
 	for ( i = 1; i < argc; i++) {
-		if (sipc_register(argv[i], &my_callback, 10) == NOK) {
-			printf("sipc_register() failed\n");
+		if (smp_register(argv[i], &my_callback, 10) == NOK) {
+			printf("smp_register() failed\n");
 			goto out;
 		}
 		printf("registered to the title: %s\n", argv[i]);
@@ -46,18 +46,18 @@ int main(int argc, char **argv)
 
 		token = strtok_r(send_buf, " ", &saveptr);
 
-		if (sipc_send_data(token, saveptr, strlen(saveptr)) == NOK) {
-			printf("sipc_send_data() failed\n");
+		if (smp_send_data(token, saveptr, 10) == NOK) {
+			printf("smp_send_data() failed\n");
 			goto out;
 		}
 	}
 
 out:
 	for ( i = 1; i < argc; i++) {
-		sipc_unregister(argv[i]);
+		smp_unregister(argv[i]);
 	}
 
-	sipc_destroy();
+	smp_destroy();
 
 exit:
 	return OK;

@@ -1,10 +1,10 @@
 COMMON_INCDIR=./include
 
 C_SRCS = \
-sipc_common.c
+smp_common.c
 
 OBJS += \
-./sipc_common.o
+./smp_common.o
 
 .PHONY: all clean
 

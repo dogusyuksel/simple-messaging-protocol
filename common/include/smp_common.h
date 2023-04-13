@@ -1,5 +1,5 @@
-#ifndef __SIPC_COMMON_
-#define __SIPC_COMMON_
+#ifndef __SMP_COMMON_
+#define __SMP_COMMON_
 
 #include <stdio.h>
 #include <unistd.h>
@@ -55,7 +55,7 @@
 #define JSON_STR_EMPTY		"NULL"
 
 #ifdef OPEN_DEBUG
-#define debugf(...)		fprintf(stderr, "[%d]\t", __LINE__);fprintf(stdout, __VA_ARGS__)
+#define debugf(...)		fprintf(stderr, ANSI_COLOR_RESET);fprintf(stdout, "[%d]\t", __LINE__);fprintf(stdout, __VA_ARGS__)
 #else
 #define debugf(...)
 #endif
@@ -95,16 +95,16 @@ struct _packet
 	char *payload;
 };
 
-int sipc_socket_open_use_buf(const char *buff, int scktype, int flag);
-int sipc_fill_wildcard_sockstorage(unsigned short port, unsigned int scktype,
-    struct sockaddr_storage *addr);
-int sipc_buf_to_sockstorage(const char *addr, unsigned short port,
-    struct sockaddr_storage *converted_addr);
-int sipc_socket_accept(int sockfd, struct sockaddr_storage *addr);
-int sipc_socket_open_use_sockaddr(const struct sockaddr *addr, int scktype, int flag);
-int sipc_bind_socket(int fd, const struct sockaddr *addr);
-int sipc_connect_socket(int sockfd, const struct sockaddr *addr);
-int sipc_socket_listen(int sockfd, int backlog);
-char *packet_type_beautiy(enum _packet_type type);
+int smp_common_socket_open_use_buf(void);
+int smp_common_fill_wildcard_sockstorage(unsigned short port,
+	struct sockaddr_storage *addr);
+int smp_common_buf_to_sockstorage(const char *addr, unsigned short port,
+	struct sockaddr_storage *converted_addr);
+int smp_common_socket_accept(int sockfd, struct sockaddr_storage *addr);
+int smp_common_socket_open_use_sockaddr(const struct sockaddr *addr);
+int smp_common_bind_socket(int fd, const struct sockaddr *addr);
+int smp_common_connect_socket(int sockfd, const struct sockaddr *addr);
+int smp_common_socket_listen(int sockfd);
+char *smp_common_packet_type_beauty(enum _packet_type type);
 
-#endif //__SIPC_COMMON
+#endif //__SMP_COMMON_

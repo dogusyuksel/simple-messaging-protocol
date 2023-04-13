@@ -1,9 +1,10 @@
 COMMON_PATH=common
-LIBSIPCC_PATH=libsipcc
-LIBRARY_NAME=sipcc
+LIB_PATH=libsmp
+LIBRARY_NAME=smp
 JSON_C_BUILD_DIR=json-c-build
 JSON_C_DIRECTORY=json-c
 JSON_C_TEST_DIRECTORY=tests
 JSON_C__CMAKE_FILES_DIRECTORY=CMakeFiles
+JSON_C__APPS=apps
 JSON_GITHUB_LINK=https://github.com/json-c/json-c.git
 OPEN_DEBUG=y

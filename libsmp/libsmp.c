@@ -1,4 +1,4 @@
-#include "sipc_common.h"
+#include "smp_common.h"
 
 struct callback_list_entry {
 	int (*callback)(void *, unsigned int);
@@ -8,19 +8,19 @@ struct callback_list_entry {
 
 TAILQ_HEAD(callback_list, callback_list_entry);
 
-struct sipc_identifier
+struct smp_identifier
 {
 	bool server_started;
 	unsigned int port;
 	struct callback_list callback_list;
 };
 
-typedef struct sipc_identifier _sipc_identifier;
+typedef struct smp_identifier _smp_identifier;
 
-static _sipc_identifier identifier;
+static _smp_identifier identifier;
 
 
-static int sipc_send_packet(struct _packet *packet, int fd)
+static int smp_send_packet(struct _packet *packet, int fd)
 {
 	char buffer[BUFFER_SIZE] = {0};
 	json_object *message = NULL;
@@ -34,24 +34,31 @@ static int sipc_send_packet(struct _packet *packet, int fd)
 	if (message == NULL) {
 		return NOK;
 	}
-	json_object_object_add(message, JSON_STR_TYPE, json_object_new_int((unsigned int)packet->packet_type));
-	json_object_object_add(message, JSON_STR_PORT, json_object_new_int(packet->port));
+	json_object_object_add(message, JSON_STR_TYPE,
+		json_object_new_int((unsigned int)packet->packet_type));
+	json_object_object_add(message, JSON_STR_PORT,
+		json_object_new_int(packet->port));
 	if (packet->title) {
-		json_object_object_add(message, JSON_STR_TITLE, json_object_new_string(packet->title));
+		json_object_object_add(message, JSON_STR_TITLE,
+			json_object_new_string(packet->title));
 	} else {
-		json_object_object_add(message, JSON_STR_TITLE, json_object_new_string(JSON_STR_EMPTY));
+		json_object_object_add(message, JSON_STR_TITLE,
+			json_object_new_string(JSON_STR_EMPTY));
 	}
 	if (packet->payload) {
-		json_object_object_add(message, JSON_STR_PAYLOAD, json_object_new_string(packet->payload));
+		json_object_object_add(message, JSON_STR_PAYLOAD,
+			json_object_new_string(packet->payload));
 	} else {
-		json_object_object_add(message, JSON_STR_PAYLOAD, json_object_new_string(JSON_STR_EMPTY));
+		json_object_object_add(message, JSON_STR_PAYLOAD,
+			json_object_new_string(JSON_STR_EMPTY));
 	}
 
 	strcpy(buffer, json_object_to_json_string(message));
 	debugf("%s\n", buffer);
 
 	errno = 0;
-	if (send(fd, buffer, strlen(buffer), MSG_NOSIGNAL) == -1) {
+	if (packet->title &&
+		send(fd, buffer, strlen(buffer), MSG_NOSIGNAL) == -1) {
 		errorf("send() failed with %d: %s\n", errno, strerror(errno));
 		return NOK;
 	}
@@ -61,7 +68,7 @@ static int sipc_send_packet(struct _packet *packet, int fd)
 	return OK;
 }
 
-static struct callback_list_entry *find_callback(char *title)
+static struct callback_list_entry *smp_find_callback(char *title)
 {
 	struct callback_list_entry *entry = NULL;
 
@@ -79,10 +86,9 @@ static struct callback_list_entry *find_callback(char *title)
 	return NULL;
 }
 
-static int delete_all_callback_list(void)
+static int smp_delete_all_callback_list(void)
 {
-	struct callback_list_entry *entry1 = NULL;
-	struct callback_list_entry *entry2 = NULL;
+	struct callback_list_entry *entry1 = NULL, *entry2 = NULL;
 
 	entry1 = TAILQ_FIRST(&(identifier.callback_list));
 	while (entry1 != NULL) {
@@ -97,7 +103,7 @@ static int delete_all_callback_list(void)
 	return OK;
 }
 
-static int sipc_read_data(int sockfd, bool *destroy)
+static int smp_read_data(int sockfd, bool *destroy)
 {
 	int ret = OK;
 	struct _packet packet;
@@ -165,7 +171,7 @@ static int sipc_read_data(int sockfd, bool *destroy)
 	}
 
 	if (packet.packet_type == SENDATA && packet.payload && strlen(packet.payload)) {
-		if ((entry = find_callback(packet.title)) == NULL) {
+		if ((entry = smp_find_callback(packet.title)) == NULL) {
 			errorf("cannot find callback\n");
 			goto fail;
 		}
@@ -188,16 +194,15 @@ out:
 	return ret;
 }
 
-static void *sipc_create_server(void *arg)
+static void *smp_create_server(void *arg)
 {
+	int listen_fd, conn_fd, max_fd = 1, ret_val, i, enable = 1;
 	unsigned int port = 0;
-	int enable = 1;
-	int listen_fd, conn_fd, max_fd = 1, ret_val, i;
 	bool destroy_reuested = false;
 	struct sockaddr_storage client_addr, server_addr;
+	struct timeval tv;
 	char c_ip_addr[INET6_ADDRSTRLEN] = {0};
 	fd_set backup_set, client_set;
-	struct timeval tv;
 
 	if (!(unsigned int *)arg) {
 		errorf("arg is null\n");
@@ -209,28 +214,29 @@ static void *sipc_create_server(void *arg)
 	memset(&server_addr, 0, sizeof(server_addr));
 	memset(&client_addr, 0, sizeof(client_addr));
 
-	if (sipc_fill_wildcard_sockstorage(port, AF_UNSPEC, &server_addr) != 0) {
-		errorf("sipc_fill_wildcard_sockstorage() failed\n");
+	if (smp_common_fill_wildcard_sockstorage(port, &server_addr) != 0) {
+		errorf("smp_common_fill_wildcard_sockstorage() failed\n");
 		goto out;
 	}
 
-	if ((listen_fd = sipc_socket_open_use_sockaddr((struct sockaddr *)&server_addr, SOCK_STREAM, 0)) == -1) {
-		errorf("sipc_socket_open_use_sockaddr() failed\n");
+	if ((listen_fd =
+		smp_common_socket_open_use_sockaddr((struct sockaddr *)&server_addr)) == -1) {
+		errorf("smp_common_socket_open_use_sockaddr() failed\n");
 		goto out;
 	}
 
-	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR , &enable, sizeof(int)) < 0) {
+	if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
 		errorf("setsockopt reuseport fail\n");
 		goto out;
 	}
 
-	if (sipc_bind_socket(listen_fd, (struct sockaddr *)&server_addr) == -1) {
-		errorf("sipc_bind_socket() failed\n");
+	if (smp_common_bind_socket(listen_fd, (struct sockaddr *)&server_addr) == -1) {
+		errorf("smp_common_bind_socket() failed\n");
 		goto out;
 	}
 
-	if (sipc_socket_listen(listen_fd, BACKLOG) == -1) {
-		errorf("sipc_socket_listen() failed\n");
+	if (smp_common_socket_listen(listen_fd) == -1) {
+		errorf("smp_common_socket_listen() failed\n");
 		goto out;
 	}
 
@@ -260,7 +266,7 @@ static void *sipc_create_server(void *arg)
 		}
 
 		if (FD_ISSET(listen_fd, &client_set)) {
-			conn_fd = sipc_socket_accept(listen_fd, &client_addr);
+			conn_fd = smp_common_socket_accept(listen_fd, &client_addr);
 			if (conn_fd < 0) {
 				if (errno == EINTR) {
 					debugf("CRS interrupted, try to accept again\n");
@@ -279,8 +285,8 @@ static void *sipc_create_server(void *arg)
 
 		for (i = 0; i <= max_fd; i++) {
 			if (FD_ISSET(i, &client_set) && i != listen_fd) {
-				if (sipc_read_data(i, &destroy_reuested) == NOK) {
-					errorf("sipc_read_data() failed\n");
+				if (smp_read_data(i, &destroy_reuested) == NOK) {
+					errorf("smp_read_data() failed\n");
 					goto out;
 				}
 				close(i);
@@ -301,7 +307,7 @@ out:
 	return NULL;
 }
 
-static void create_server_thread(void)
+static void smp_create_server_thread(void)
 {
 	pthread_t thread_id;
 	pthread_attr_t thread_attr;
@@ -311,13 +317,15 @@ static void create_server_thread(void)
 		goto fail;
 	}
 
-	if (pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_DETACHED) != 0 ) {
+	if (pthread_attr_setdetachstate(&thread_attr,
+		PTHREAD_CREATE_DETACHED) != 0 ) {
 		errorf("pthread_attr_setdetachstate failure.\n");
 		goto fail;
 	}
 
 	errno = 0;
-	if (pthread_create(&thread_id, &thread_attr, sipc_create_server, (void *)(&(identifier.port))) != 0) {
+	if (pthread_create(&thread_id, &thread_attr,
+		smp_create_server, (void *)(&(identifier.port))) != 0) {
 		errorf("pthread_create failure, errno: %d\n", errno);
 		goto fail;
 	}
@@ -327,13 +335,13 @@ static void create_server_thread(void)
 	goto out;
 
 fail:
-	errorf("create_server_thread() failed\n");
+	errorf("smp_create_server_thread() failed\n");
 
 out:
 	return;
 }
 
-static int delete_callback_from_callback_list(char *title)
+static int smp_delete_callback_from_callback_list(char *title)
 {
 	struct callback_list_entry *entry = NULL;
 
@@ -342,7 +350,8 @@ static int delete_callback_from_callback_list(char *title)
 		return NOK;
 	}
 
-	if (!(&(identifier.callback_list)) || TAILQ_EMPTY(&(identifier.callback_list))) {
+	if (!(&(identifier.callback_list)) ||
+		TAILQ_EMPTY(&(identifier.callback_list))) {
 		return OK;
 	}
 
@@ -355,14 +364,16 @@ static int delete_callback_from_callback_list(char *title)
 		}
 	}
 
-	if ((&(identifier.callback_list)) && TAILQ_EMPTY(&(identifier.callback_list))) {
+	if ((&(identifier.callback_list)) &&
+		TAILQ_EMPTY(&(identifier.callback_list))) {
 		TAILQ_INIT(&(identifier.callback_list));
 	}
 
 	return OK;
 }
 
-static int find_callback_in_callback_list(int (*callback)(void *, unsigned int), char *title)
+static int smp_find_callback_in_callback_list
+	(int (*callback)(void *, unsigned int), char *title)
 {
 	struct callback_list_entry *entry = NULL;
 
@@ -381,7 +392,8 @@ static int find_callback_in_callback_list(int (*callback)(void *, unsigned int),
 	return NOK;
 }
 
-static int add_callback_to_callback_list(int (*callback)(void *, unsigned int), char *title)
+static int smp_add_callback_to_callback_list
+	(int (*callback)(void *, unsigned int), char *title)
 {
 	struct callback_list_entry *entry = NULL;
 
@@ -390,7 +402,8 @@ static int add_callback_to_callback_list(int (*callback)(void *, unsigned int), 
 		return NOK;
 	}
 
-	entry = (struct callback_list_entry *)calloc(1, sizeof(struct callback_list_entry));
+	entry = (struct callback_list_entry *)
+		calloc(1, sizeof(struct callback_list_entry));
 	if (!entry) {
 		errorf("calloc failed\n");
 		return NOK;
@@ -412,11 +425,12 @@ static int add_callback_to_callback_list(int (*callback)(void *, unsigned int), 
 	return OK;
 }
 
-static int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _packet_type packet_type,
-	void *data, unsigned int len, unsigned int _port, unsigned long timeout)
+static int smp_send(char *title, int (*callback)(void *, unsigned int), enum _packet_type packet_type,
+	void *data, unsigned int port, unsigned long timeout)
 {
 	int ret = NOK;
 	int fd  = - 1;
+	unsigned int len = 0;
 	unsigned int local_svr_port = 0;
 	unsigned long timeout_cnt = 0;
 	struct sockaddr_storage address;
@@ -436,23 +450,25 @@ static int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _p
 
 	local_svr_port = identifier.port;
 
-	if (sipc_buf_to_sockstorage(IPV6_LOOPBACK_ADDR, _port, &address) == NOK) {
-		errorf("sipc_buf_to_sockstorage() failed\n");
+	if (smp_common_buf_to_sockstorage(IPV6_LOOPBACK_ADDR, port, &address) == NOK) {
+		errorf("smp_common_buf_to_sockstorage() failed\n");
 		return NOK;
 	}
 
 	while (timeout_cnt <= timeout) {
-		close(fd);
+		if (fd) {
+			close(fd);
+		}
 		sleep(1);
 		timeout_cnt++;
 
-		fd = sipc_socket_open_use_buf(IPV6_LOOPBACK_ADDR, SOCK_STREAM, 0);
+		fd = smp_common_socket_open_use_buf();
 		if (fd == -1) {
 			errorf("socket() failed with %d: %s\n", errno, strerror(errno));
 			continue;
 		}
 
-		if (sipc_connect_socket(fd, (struct sockaddr*)&address) < 0) {
+		if (smp_common_connect_socket(fd, (struct sockaddr*)&address) < 0) {
 			errorf("connect() failed with %d: %s\n", errno, strerror(errno));
 			continue;
 		}
@@ -474,19 +490,20 @@ static int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _p
 	packet.packet_type = (unsigned char)packet_type;
 	packet.payload = NULL;
 
-	if (data && len) {
+	if (data && (len = strlen((char *)data))) {
 		packet.payload = (void *)calloc(1, len + 1);
 		if (!packet.payload) {
 			errorf("calloc failed\n");
 			goto fail;
 		}
-		strncpy(packet.payload, data, len);
+		strcpy(packet.payload, data);
 	}
 
 	packet.port = identifier.port;
 
-	if (sipc_send_packet(&packet, fd) == NOK) {
-		errorf("sipc_send_packet() failed with %d: %s\n", errno, strerror(errno));
+	if (smp_send_packet(&packet, fd) == NOK) {
+		errorf("smp_send_packet() failed with %d: %s\n",
+			errno, strerror(errno));
 		goto fail;
 	}
 
@@ -496,13 +513,14 @@ static int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _p
 			goto fail;
 		}
 
-		if (local_svr_port < STARTING_PORT || local_svr_port > STARTING_PORT + BACKLOG) {
+		if (local_svr_port < STARTING_PORT ||
+			local_svr_port > STARTING_PORT + BACKLOG) {
 			debugf("need to register first\n");
 		} else {
 			debugf("port %d initialized for this app\n", local_svr_port);
 			identifier.port = local_svr_port;
 			TAILQ_INIT(&(identifier.callback_list));
-			create_server_thread();
+			smp_create_server_thread();
 		}
 	}
 
@@ -511,20 +529,20 @@ static int sipc_send(char *title, int (*callback)(void *, unsigned int), enum _p
 			errorf("callback cannot be NULL while registering\n");
 			goto fail;
 		}
-		if (find_callback_in_callback_list(callback, title) == NOK) {
-			if (add_callback_to_callback_list(callback, title) == NOK) {
-				errorf("add_callback_to_callback_list() failed\n");
+		if (smp_find_callback_in_callback_list(callback, title) == NOK) {
+			if (smp_add_callback_to_callback_list(callback, title) == NOK) {
+				errorf("smp_add_callback_to_callback_list() failed\n");
 				goto fail;
 			}
 		}
 	} else if (packet_type == UNREGISTER) {
-		if (delete_callback_from_callback_list(title) == NOK) {
-			errorf("delete_callback_from_callback_list() failed\n");
+		if (smp_delete_callback_from_callback_list(title) == NOK) {
+			errorf("smp_delete_callback_from_callback_list() failed\n");
 			goto fail;
 		}
 	} else if (packet_type == UNREGISTER_ALL) {
-		if (delete_all_callback_list() == NOK) {
-			errorf("delete_all_callback_list() failed\n");
+		if (smp_delete_all_callback_list() == NOK) {
+			errorf("smp_delete_all_callback_list() failed\n");
 			goto fail;
 		}
 	}
@@ -535,14 +553,16 @@ fail:
 	ret = NOK;
 
 out:
-	close(fd);
+	if (fd) {
+		close(fd);
+	}
 	FREE(packet.title);
 	FREE(packet.payload);
 
 	return ret;
 }
 
-int sipc_register(char *title, int (*callback)(void *, unsigned int), ...)
+int smp_register(char *title, int (*callback)(void *, unsigned int), ...)
 {
 	va_list args;
 	const char *fmt = "%d";
@@ -561,24 +581,24 @@ int sipc_register(char *title, int (*callback)(void *, unsigned int), ...)
 
 	timeout = strtoul(buffer, &ptr, 10);
 
-	return sipc_send(title, callback, REGISTER, NULL, 0, PORT, timeout);
+	return smp_send(title, callback, REGISTER, NULL, PORT, timeout);
 }
 
-static int sipc_unregister_all(void)
+static int smp_unregister_all(void)
 {
 	char unreg_buf[256] = {0};
 
 	snprintf(unreg_buf, sizeof(unreg_buf), "%d", identifier.port);
 
-	return sipc_send(DUMMY_STRING, NULL, UNREGISTER_ALL, unreg_buf, strlen(unreg_buf), PORT, 0);
+	return smp_send(DUMMY_STRING, NULL, UNREGISTER_ALL, unreg_buf, PORT, 0);
 }
 
-int sipc_destroy(void)
+int smp_destroy(void)
 {
-	if (sipc_unregister_all() == NOK) {
+	if (smp_unregister_all() == NOK) {
 		return NOK;
 	}
-	if (sipc_send(DUMMY_STRING, NULL, DESTROY, NULL, 0, identifier.port, 0) == NOK) {
+	if (smp_send(DUMMY_STRING, NULL, DESTROY, NULL, identifier.port, 0) == NOK) {
 		return NOK;
 	}
 
@@ -587,7 +607,7 @@ int sipc_destroy(void)
 	return OK;
 }
 
-int sipc_unregister(char *title)
+int smp_unregister(char *title)
 {
 	char unreg_buf[256] = {0};
 
@@ -597,10 +617,10 @@ int sipc_unregister(char *title)
 	}
 
 	snprintf(unreg_buf, sizeof(unreg_buf), "%d", identifier.port);
-	return sipc_send(title, NULL, UNREGISTER, unreg_buf, strlen(unreg_buf), PORT, 0);
+	return smp_send(title, NULL, UNREGISTER, unreg_buf, PORT, 0);
 }
 
-int sipc_send_data(char *title, void *data, unsigned int len, ...)
+int smp_send_data(char *title, void *data, ...)
 {
 	va_list args;
 	const char *fmt = "%d";
@@ -608,7 +628,7 @@ int sipc_send_data(char *title, void *data, unsigned int len, ...)
 	char *ptr = NULL;
 	unsigned long timeout = 0;
 
-	if (!title || !data || !len) {
+	if (!title || !data) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
@@ -619,10 +639,10 @@ int sipc_send_data(char *title, void *data, unsigned int len, ...)
 
 	timeout = strtoul(buffer, &ptr, 10);
 
-	return sipc_send(title, NULL, SENDATA, data, len, PORT, timeout);
+	return smp_send(title, NULL, SENDATA, data, PORT, timeout);
 }
 
-int sipc_send_bradcast_data(void *data, unsigned int len, ...)
+int smp_send_bradcast_data(void *data, ...)
 {
 	va_list args;
 	const char *fmt = "%d";
@@ -630,7 +650,7 @@ int sipc_send_bradcast_data(void *data, unsigned int len, ...)
 	char *ptr = NULL;
 	unsigned long timeout = 0;
 
-	if (!data || !len) {
+	if (!data) {
 		errorf("args cannot be NULL\n");
 		return NOK;
 	}
@@ -641,10 +661,10 @@ int sipc_send_bradcast_data(void *data, unsigned int len, ...)
 
 	timeout = strtoul(buffer, &ptr, 10);
 
-	return sipc_send(BROADCAST_UNIQUE_TITLE, NULL, SENDATA, data, len, PORT, timeout);
+	return smp_send(BROADCAST_UNIQUE_TITLE, NULL, SENDATA, data, PORT, timeout);
 }
 
-int sipc_broadcast_register(int (*callback)(void *, unsigned int), ...)
+int smp_broadcast_register(int (*callback)(void *, unsigned int), ...)
 {
 	va_list args;
 	const char *fmt = "%d";
@@ -658,10 +678,10 @@ int sipc_broadcast_register(int (*callback)(void *, unsigned int), ...)
 
 	timeout = strtoul(buffer, &ptr, 10);
 
-	return sipc_register(BROADCAST_UNIQUE_TITLE, callback, timeout);
+	return smp_register(BROADCAST_UNIQUE_TITLE, callback, timeout);
 }
 
-int sipc_broadcast_unregister(void)
+int smp_broadcast_unregister(void)
 {
-	return sipc_unregister(BROADCAST_UNIQUE_TITLE);
+	return smp_unregister(BROADCAST_UNIQUE_TITLE);
 }
