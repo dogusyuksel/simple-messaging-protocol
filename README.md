@@ -29,7 +29,7 @@
 <h2 id="about-the-project"> About The Project</h2>
 
 <p align="justify"> 
-  Inter Process Communşcatşon could be painful sometimes. In most complex projects, there should be a generic way (a communication bus) for all the processes to communicate each other easily and freely.
+  Inter Process Communication could be painful sometimes. In most complex projects, there should be a generic way (a communication bus) for all the processes to communicate each other easily and freely.
 
   So, I decided to write this application. Because with this application, I can do the followings;
 
