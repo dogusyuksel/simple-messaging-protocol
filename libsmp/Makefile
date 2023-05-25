@@ -16,7 +16,7 @@ OBJS += \
 .PHONY: all clean
 
 all:
-	$(CC) $(C_SRCS) $(CFLAGS) $(LDFLAGS) $(LIBSMP_INCDIR) -o ./$(SO_NAME) -shared
+	$(CC) $(C_SRCS) $(CFLAGS) $(LDFLAGS) $(LIBSMP_INCDIR) -o ./$(SO_NAME) -shared  -Wl,-rpath=$(JSON_C_BUILD)
 
 clean:
 	$(RM) $(OBJS) ./$(SO_NAME)

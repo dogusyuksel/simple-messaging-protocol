@@ -82,8 +82,7 @@ No third party packets used in this project.
     ├── Config
     ├── LICENSE 
     ├── Makefile  
-    ├── README.md 
-    ├── environment  
+    ├── README.md  
 
 * pictures folder: contains pictures used in the README.md file.
 * test folder: contains example application that use simple ipc api.
@@ -94,7 +93,6 @@ No third party packets used in this project.
 * LICENSE file: contains license information
 * Makefile: makefile to compile the program
 * README.md file: readme itself
-* environment file: arrange LD_LIBRARY_PATH environment to execute test application which uses the dynmaic library  
 
 ![-----------------------------------------------------](https://raw.githubusercontent.com/andreasbm/readme/master/assets/lines/rainbow.png)
 

@@ -14,7 +14,7 @@ OBJS += \
 .PHONY: all clean
 
 all:
-	$(CC) -o ./$(TEST_EXECUTABLE_NAME) $(C_SRCS) $(CFLAGS) $(LDFLAGS) $(TEST_LIBDIR) $(TEST_INCDIR)
+	$(CC) -o ./$(TEST_EXECUTABLE_NAME) $(C_SRCS) $(CFLAGS) $(LDFLAGS) $(TEST_LIBDIR) $(TEST_INCDIR) -Wl,-rpath=$(LIB_DIR)
 
 clean:
 	$(RM) $(OBJS) ./$(TEST_EXECUTABLE_NAME)
