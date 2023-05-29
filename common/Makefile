@@ -1,5 +1,3 @@
-COMMON_INCDIR=./include
-
 C_SRCS = \
 smp_common.c
 
@@ -9,7 +7,7 @@ OBJS += \
 .PHONY: all clean
 
 all:
-	$(CC) $(CFLAGS) $(LDFLAGS) -I$(COMMON_INCDIR) -c $(C_SRCS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -I./include -c $(C_SRCS)
 
 clean:
 	$(RM) $(OBJS)

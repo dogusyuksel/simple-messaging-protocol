@@ -4,6 +4,8 @@ C_SRCS = \
 libsmp.c \
 ../common/smp_common.o
 
+SO_NAME=lib${LIBRARY_NAME}.so
+
 CFLAGS += -I$(JSON_C_DIR)/include/json-c
 CFLAGS += -I$(JSON_C_DIR)/include
 LDFLAGS+= -L$(JSON_C_DIR)/lib -ljson-c
